@@ -1,0 +1,51 @@
+# control.template — deb 包 control 文件模板
+# 使用 Bash 变量替换语法，配合 gen-control.sh 或 envsubst 使用
+#
+# ── 字段说明 (Debian Policy Manual §5.1) ──
+# ${PKG_NAME}           : 包名，必须以 noatin- 开头，全小写，允许连字符
+#                         示例: noatin-chatgpt-client
+# ${VERSION}            : 版本号，Debian 格式 {upstream}-{debian_revision}
+#                         示例: 1.0.0-1
+# ${ARCHITECTURE}       : 目标架构，固定值 amd64
+# ${MAINTAINER}         : 维护者，格式 "Name <email>"
+#                         固定值: Noatin OS Team <repo@cccczl.top>
+# ${DEPENDS}            : 运行时依赖，逗号分隔列表
+#                         声明的依赖必须存在于 Debian trixie main 仓库
+#                         为空时不生成 Depends 行 (由 gen-control.sh 处理)
+# ${INSTALLED_SIZE}     : 估算磁盘占用，KB 取整，由 du -sk 自动计算
+# ${SECTION}            : 分类，固定值 utils
+# ${PRIORITY}           : 优先级，固定值 optional
+# ${STANDARDS_VERSION}  : Debian Policy 版本，固定值 4.7.0
+# ${HOMEPAGE}           : 项目主页 URL，可选 (为空时不生成 Homepage 行)
+#                         示例: https://github.com/example/chatgpt-client
+# ${DESCRIPTION}        : 一行简短描述，≤60 字符，中文
+#                         示例: ChatGPT 桌面客户端
+# ${LONG_DESC}          : 长描述，每行以空格开头缩进
+#                         由 gen-control.sh 将 --long-desc 中的换行分割为多行并缩进
+#
+# ── 可用变量 (由 gen-control.sh 注入) ──
+# ${PKG_NAME}           (必填 - 由 --pkg-name 传入，自动补 noatin- 前缀)
+# ${VERSION}            (必填 - 由 --version 传入)
+# ${ARCHITECTURE}       (固定 - 由脚本自动设为 amd64)
+# ${MAINTAINER}         (固定 - 由脚本自动设为 Noatin OS Team <repo@cccczl.top>)
+# ${DEPENDS}            (可选 - 由 --depends 传入，为空时不生成此字段)
+# ${INSTALLED_SIZE}     (必填 - 由脚本通过 du -sk 自动计算)
+# ${SECTION}            (固定 - 由脚本自动设为 utils)
+# ${PRIORITY}           (固定 - 由脚本自动设为 optional)
+# ${STANDARDS_VERSION}  (固定 - 由脚本自动设为 4.7.0)
+# ${HOMEPAGE}           (可选 - 由 --homepage 传入，为空时不生成此字段)
+# ${DESCRIPTION}        (必填 - 由 --description 传入)
+# ${LONG_DESC}          (必填 - 由 --long-desc 传入，脚本自动格式化换行缩进)
+
+Package: ${PKG_NAME}
+Version: ${VERSION}
+Architecture: ${ARCHITECTURE}
+Maintainer: ${MAINTAINER}
+${DEPENDS}
+Standards-Version: ${STANDARDS_VERSION}
+Installed-Size: ${INSTALLED_SIZE}
+Section: ${SECTION}
+Priority: ${PRIORITY}
+${HOMEPAGE}
+Description: ${DESCRIPTION}
+${LONG_DESC}

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=${EN_NAME}
+Name[zh_CN]=${ZH_NAME}
+Comment=${EN_COMMENT}
+Comment[zh_CN]=${ZH_COMMENT}
+Icon=${ICON_PATH}
+Exec=${EXEC_PATH}
+Categories=${CATEGORIES}
+Terminal=${TERMINAL}
+StartupNotify=true
+${KEYWORDS_BLOCK}
+${KEYWORDS_ZH_BLOCK}
+${MIME_TYPES_BLOCK}
+${WM_CLASS_BLOCK}
+

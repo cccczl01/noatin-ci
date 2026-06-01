@@ -1,0 +1,40 @@
+name: Build DEB Packages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'debian/packages/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq dpkg-dev dpkg-sig gnupg lintian git
+
+      - name: Run CI build
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          VPS_API_KEY: ${{ secrets.VPS_API_KEY }}
+          VPS_DEP11_URL: ${{ secrets.VPS_DEP11_URL }}
+          VPS_CALLBACK_URL: ${{ secrets.VPS_CALLBACK_URL }}
+        run: |
+          bash debian/scripts/ci-build.sh

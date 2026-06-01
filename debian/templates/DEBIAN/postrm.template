@@ -1,0 +1,55 @@
+#!/bin/bash
+set -e
+
+# ${PKG_NAME} postrm — 卸载后清理桌面条目和 AppStream 缓存
+# 占位符:
+#   ${PKG_NAME} : deb 包名 (如 noatin-chatgpt-client)
+#   ${HAS_DESKTOP} : yes/no (由 gen-postrm.sh 替换)
+#
+# Debian Policy §6.2: postrm 在以下情况被调用:
+#   $1 = remove   — 包被移除（dpkg --remove），但配置文件保留
+#   $1 = purge    — 包被彻底清除（dpkg --purge），配置文件也删除
+#   $1 = upgrade  — 包被新版本替代
+#   $1 = failed-upgrade — 升级失败回滚
+#
+# 本脚本 purge 时完整清理 /etc 配置 + 桌面/AppStream 缓存；
+# remove 时仅清理桌面/AppStream 缓存（配置文件保留，符合 Debian Policy §6.2）。
+
+HAS_DESKTOP="${HAS_DESKTOP}"
+
+if [[ "$1" = "purge" ]]; then
+    if [[ -d "/etc/${PKG_NAME}" ]]; then
+        echo "Cleaning /etc/${PKG_NAME}/..."
+        # shellcheck disable=SC2115 # ${PKG_NAME} is substituted by gen-postrm.sh
+        rm -rf "/etc/${PKG_NAME}"
+    fi
+fi
+
+if [[ "$1" = "purge" ]] || [[ "$1" = "remove" ]]; then
+    if [[ "$HAS_DESKTOP" = "yes" ]]; then
+        echo "Updating desktop database..."
+        if command -v update-desktop-database &>/dev/null; then
+            if ! update-desktop-database; then
+                echo "警告: update-desktop-database 执行失败（退出码 $?），.desktop 缓存可能未更新" >&2
+            fi
+        fi
+    fi
+
+    echo "Refreshing AppStream cache..."
+    if command -v appstreamcli &>/dev/null; then
+        if command -v timeout &>/dev/null; then
+            timeout 30 appstreamcli refresh --force || {
+                RC=$?
+                if [ "${RC}" -eq 124 ]; then
+                    echo "警告: appstreamcli refresh 超时（30 秒），AppStream 缓存可能未更新" >&2
+                else
+                    echo "警告: appstreamcli refresh 失败（退出码 ${RC}），AppStream 缓存可能未更新" >&2
+                fi
+            }
+        else
+            if ! appstreamcli refresh --force; then
+                echo "警告: appstreamcli refresh 失败（退出码 $?），AppStream 缓存可能未更新" >&2
+            fi
+        fi
+    fi
+fi

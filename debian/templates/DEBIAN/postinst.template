@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+# ${PKG_NAME} postinst — 安装后更新 desktop 数据库和 AppStream 缓存
+# 占位符:
+#   ${PKG_NAME} : deb 包名 (如 noatin-chatgpt-client)
+#   ${HAS_DESKTOP} : yes/no (由 gen-postinst.sh 替换)
+
+HAS_DESKTOP="${HAS_DESKTOP}"
+
+if [[ "$HAS_DESKTOP" = "yes" ]]; then
+    echo "Updating desktop database..."
+    if command -v update-desktop-database &>/dev/null; then
+        update-desktop-database || true
+    fi
+fi
+
+echo "Refreshing AppStream cache..."
+if command -v appstreamcli &>/dev/null; then
+    timeout 30 appstreamcli refresh --force || true
+fi
+

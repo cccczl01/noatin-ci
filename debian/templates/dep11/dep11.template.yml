@@ -1,0 +1,35 @@
+---
+Type: desktop-application
+ID: ${APPSTREAM_ID}
+Name:
+    C: ${EN_NAME}
+    zh_CN: ${ZH_NAME}
+Summary:
+    C: ${EN_SUMMARY}
+    zh_CN: ${ZH_SUMMARY}
+Description:
+    C: >-
+        ${EN_DESCRIPTION}
+    zh_CN: >-
+        ${ZH_DESCRIPTION}
+DeveloperName:
+    C: ${DEVELOPER_NAME}
+ProjectLicense: ${PROJECT_LICENSE}
+Categories:
+${CATEGORIES_BLOCK}
+Icon:
+${ICON_BLOCK}
+${SCREENSHOTS_BLOCK}
+${HOMEPAGE_BLOCK}
+Provides:
+    binaries:
+    - ${BINARY_NAME}
+Launchable:
+    desktop-id:
+    - ${DESKTOP_ID}
+Releases:
+- version: ${VERSION}
+  date: ${RELEASE_DATE}
+  description:
+    C: >-
+        ${VERSION} release

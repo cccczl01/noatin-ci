@@ -282,7 +282,7 @@ CHANGELOGEOF
     if git -C "$REPO_DIR" diff --cached --quiet; then
         echo "  GIT: 无变更需要提交"
     else
-        git -C "$REPO_DIR" commit -m "$COMMIT_MSG" 2>/dev/null || true
+        git -C "$REPO_DIR" commit -m "$COMMIT_MSG"
         echo "  GIT: 已提交 — ${COMMIT_MSG}"
     fi
 
@@ -320,7 +320,12 @@ CHANGELOGEOF
         fi
 
         if [[ $GITEE_RC -eq 0 ]]; then
-            echo "  PUSH: Gitee 推送成功"
+            REMOTE_SHA=$(git -C "$REPO_DIR" ls-remote "$GITEE_URL" refs/heads/main 2>/dev/null | awk '{print $1}')
+            if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
+                echo "  PUSH: Gitee 推送成功"
+            else
+                echo "  WARN: Gitee push 返回成功但 local=$LOCAL_SHA remote=$REMOTE_SHA 不一致"
+            fi
         else
             echo "  WARN: Gitee 推送失败 (exit code: ${GITEE_RC})"
         fi

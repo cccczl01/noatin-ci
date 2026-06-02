@@ -286,7 +286,7 @@ CHANGELOGEOF
     GITEE_REMOTE="gitee"
     if git -C "$REPO_DIR" remote get-url "$GITEE_REMOTE" > /dev/null 2>&1; then
         if [[ -n "${GITEE_TOKEN:-}" ]]; then
-            GITEE_URL="https://${GITEE_TOKEN}@gitee.com/noatin/noatin-repo.git"
+            GITEE_URL="https://${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git"
         else
             GITEE_URL="$(git -C "$REPO_DIR" remote get-url "$GITEE_REMOTE")"
         fi

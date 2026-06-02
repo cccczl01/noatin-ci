@@ -12,6 +12,8 @@ if [[ -z "${GITEE_TOKEN:-}" ]]; then
     exit 1
 fi
 git clone "https://oauth2:${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
+git -C "$REPO_DIR" config user.name "CI Builder"
+git -C "$REPO_DIR" config user.email "ci@noatin.dev"
 git -C "$REPO_DIR" remote rename origin gitee
 git -C "$REPO_DIR" remote add github "https://github.com/cccczl01/noatin-repo.git"
 git -C "$REPO_DIR" remote add gitcode "https://gitcode.com/cccczl001/noatin-repo.git"

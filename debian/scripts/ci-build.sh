@@ -12,6 +12,7 @@ if [[ -z "${GITEE_TOKEN:-}" ]]; then
     exit 1
 fi
 git clone "https://${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
+git -C "$REPO_DIR" remote rename origin gitee
 echo "REPO_DIR: ${REPO_DIR} (cloned from Gitee)"
 
 DRY_RUN="false"

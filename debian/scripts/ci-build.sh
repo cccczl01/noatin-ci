@@ -295,9 +295,30 @@ CHANGELOGEOF
         fi
         echo "  PUSH: Gitee..."
         set +e
-        git -C "$REPO_DIR" push "$GITEE_URL" main 2>&1 | sed 's|https://[^@]*@|https://***@|g'
+        # fetch + rebase before push to handle concurrent remote changes
+        LOCAL_SHA=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null)
+        push_output=$(git -C "$REPO_DIR" push "$GITEE_URL" main 2>&1)
         GITEE_RC=$?
         set -e
+        echo "${push_output}" | sed 's|https://[^@]*@|https://***@|g'
+
+        # If "Everything up-to-date" but local has new commits, try fetch+rebase+push
+        if [[ $GITEE_RC -eq 0 ]] && echo "${push_output}" | grep -q "Everything up-to-date"; then
+            if [[ -n "$LOCAL_SHA" ]]; then
+                REMOTE_SHA=$(git -C "$REPO_DIR" ls-remote "$GITEE_URL" refs/heads/main 2>/dev/null | awk '{print $1}')
+                if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
+                    echo "  PUSH: 检测到远程有新提交，尝试 fetch + rebase..."
+                    set +e
+                    git -C "$REPO_DIR" fetch "$GITEE_URL" main 2>&1 | sed 's|https://[^@]*@|https://***@|g'
+                    git -C "$REPO_DIR" rebase FETCH_HEAD 2>&1
+                    rebase_push_output=$(git -C "$REPO_DIR" push "$GITEE_URL" main 2>&1)
+                    GITEE_RC=$?
+                    set -e
+                    echo "${rebase_push_output}" | sed 's|https://[^@]*@|https://***@|g'
+                fi
+            fi
+        fi
+
         if [[ $GITEE_RC -eq 0 ]]; then
             echo "  PUSH: Gitee 推送成功"
         else

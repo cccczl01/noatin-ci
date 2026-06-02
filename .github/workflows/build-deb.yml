@@ -31,7 +31,7 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
           VPS_API_KEY: ${{ secrets.VPS_API_KEY }}
           VPS_DEP11_URL: ${{ secrets.VPS_DEP11_URL }}

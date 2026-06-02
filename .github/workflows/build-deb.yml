@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq dpkg-dev dpkg-sig gnupg lintian git
+          sudo apt-get install -y -qq dpkg-dev gnupg lintian git
 
       - name: Run CI build
         env:

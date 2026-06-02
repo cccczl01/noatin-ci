@@ -11,7 +11,7 @@ if [[ -z "${GITEE_TOKEN:-}" ]]; then
     echo "错误: GITEE_TOKEN 未设置，无法 clone noatin-repo" >&2
     exit 1
 fi
-git clone "https://${GITEE_TOKEN}@gitee.com/noatin/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
+git clone "https://${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
 echo "REPO_DIR: ${REPO_DIR} (cloned from Gitee)"
 
 DRY_RUN="false"

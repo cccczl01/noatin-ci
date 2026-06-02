@@ -11,8 +11,10 @@ if [[ -z "${GITEE_TOKEN:-}" ]]; then
     echo "错误: GITEE_TOKEN 未设置，无法 clone noatin-repo" >&2
     exit 1
 fi
-git clone "https://${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
+git clone "https://oauth2:${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
 git -C "$REPO_DIR" remote rename origin gitee
+git -C "$REPO_DIR" remote add github "https://github.com/cccczl01/noatin-repo.git"
+git -C "$REPO_DIR" remote add gitcode "https://gitcode.com/cccczl001/noatin-repo.git"
 echo "REPO_DIR: ${REPO_DIR} (cloned from Gitee)"
 
 DRY_RUN="false"
@@ -287,7 +289,7 @@ CHANGELOGEOF
     GITEE_REMOTE="gitee"
     if git -C "$REPO_DIR" remote get-url "$GITEE_REMOTE" > /dev/null 2>&1; then
         if [[ -n "${GITEE_TOKEN:-}" ]]; then
-            GITEE_URL="https://${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git"
+            GITEE_URL="https://oauth2:${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git"
         else
             GITEE_URL="$(git -C "$REPO_DIR" remote get-url "$GITEE_REMOTE")"
         fi

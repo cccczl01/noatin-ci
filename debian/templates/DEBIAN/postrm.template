@@ -3,7 +3,7 @@ set -e
 
 # ${PKG_NAME} postrm — 卸载后清理桌面条目和 AppStream 缓存
 # 占位符:
-#   ${PKG_NAME} : deb 包名 (如 noatin-chatgpt-client)
+#   ${PKG_NAME} : deb 包名 (如 chatgpt-client)
 #   ${HAS_DESKTOP} : yes/no (由 gen-postrm.sh 替换)
 #
 # Debian Policy §6.2: postrm 在以下情况被调用:

@@ -30,7 +30,7 @@ cat <<'EOF'
                   [--output-dir <目录>]
 
 必填参数:
-  --pkg-name <name>          包名 (自动添加 noatin- 前缀，除非已有)
+  --pkg-name <name>          包名
   --zh-name <中文名称>        AppStream 中文名称
   --zh-summary <中文摘要>     AppStream 中文摘要
   --zh-description <中文描述> AppStream 中文详细描述 (\n 换行自动转 <p> 段落)
@@ -135,10 +135,6 @@ if [ -n "${SCREENSHOT_URL}" ] && [[ ! "${SCREENSHOT_URL}" =~ ^https?:// ]]; then
     exit 1
 fi
 
-if [[ ! "$PN_NAME" =~ ^noatin- ]]; then
-    PN_NAME="noatin-${PN_NAME}"
-fi
-
 if [[ ! "$PN_NAME" =~ $PKG_NAME_RE ]]; then
     echo "错误: 包名 '$PN_NAME' 不符合 Debian Policy (仅小写字母、数字、+.- 字符)" >&2
     exit 1
@@ -149,8 +145,8 @@ if [[ ! -f "$TEMPLATE" ]]; then
     exit 1
 fi
 
-TOOL_NAME="${PN_NAME#noatin-}"
-APPSTREAM_ID="com.noatin.${TOOL_NAME}"
+TOOL_NAME="${PN_NAME}"
+APPSTREAM_ID="com.github.${TOOL_NAME}"
 
 if [[ -z "$BINARY_NAME" ]]; then
     BINARY_NAME="$PN_NAME"
@@ -163,8 +159,8 @@ fi
 if [[ -z "$EN_NAME" ]]; then
     EN_NAME="$TOOL_NAME"
 fi
-EN_SUMMARY="$TOOL_NAME for Noatin OS"
-DEVELOPER_ID="com.noatin"
+EN_SUMMARY="${TOOL_NAME}"
+DEVELOPER_ID="com.github"
 
 if [[ -z "$EN_DESCRIPTION" ]]; then
     EN_DESCRIPTION="$EN_SUMMARY"

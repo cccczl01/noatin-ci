@@ -172,8 +172,50 @@ else
     DEBIAN_VER="${UPSTREAM_VERSION}-${DEBIAN_REVISION}"
 fi
 
-PKG_NAME="noatin-${NAME}"
+PKG_NAME="${NAME}"
 
+# --- deb-url 模式：直接采用原包，不重复打包 ---
+if [[ "$FETCH_TYPE" == "deb-url" ]]; then
+    mkdir -p "$OUTPUT_DIR"
+    tmp=$(mktemp -d)
+    deb_file="${tmp}/upstream.deb"
+    echo "--- 下载原始 deb ---"
+    echo "    来源: ${FETCH_SOURCE}"
+    if ! wget -q --show-progress -O "$deb_file" "$FETCH_SOURCE" 2>&1; then
+        echo "错误: 下载失败: $FETCH_SOURCE" >&2
+        rm -rf "$tmp"
+        exit 1
+    fi
+
+    # 从原始 deb 中提取版本信息
+    orig_version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null || echo "$DEBIAN_VER")
+    orig_pkg_name=$(dpkg-deb -f "$deb_file" Package 2>/dev/null || echo "$PKG_NAME")
+
+    DEB_FILE="${OUTPUT_DIR}/${orig_pkg_name}_${orig_version}_amd64.deb"
+    cp "$deb_file" "$DEB_FILE"
+    rm -rf "$tmp"
+
+    echo "--- 生成 DEP-11 元数据 ---"
+    "${TEMPLATES_DIR}/gen-dep11.sh" \
+        --pkg-name "$NAME" \
+        --zh-name "$ZH_NAME" \
+        --zh-summary "$ZH_SUMMARY" \
+        --zh-description "$ZH_DESC" \
+        --developer-name "$DEVELOPER_NAME" \
+        --project-license "$PROJECT_LICENSE" \
+        --version "$UPSTREAM_VERSION" \
+        --icon-url "$ICON_URL" \
+        ${HOMEPAGE:+--homepage "$HOMEPAGE"} \
+        ${SCREENSHOT_URL:+--screenshot-url "$SCREENSHOT_URL"} \
+        --output-dir "$PKG_DIR"
+
+    echo ""
+    echo "=== 构建完成 ==="
+    echo "  deb: ${DEB_FILE}"
+    exit 0
+fi
+
+# --- 自主打包模式 (local / npm)：从源码构建 ---
 STAGING_DIR="$(mktemp -d /tmp/build-package-XXXXXX)"
 cleanup() {
     rm -rf "$STAGING_DIR"

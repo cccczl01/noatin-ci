@@ -34,7 +34,7 @@ usage() {
     [--release-date <日期>] [--output-dir <目录>]
 
 必填参数:
-  --pkg-name <name>           包名 (自动添加 noatin- 前缀，除非已有)
+  --pkg-name <name>           包名
   --zh-name <中文名称>        DEP-11 中文名称
   --zh-summary <中文摘要>     DEP-11 中文摘要
   --zh-description <中文描述> DEP-11 中文详细描述 (\n 换行自动转 YAML >- 折叠块)
@@ -61,7 +61,7 @@ usage() {
     --developer-name "Noatin OS Team" \
     --project-license "MIT" \
     --version 1.0.0 \
-    --icon-url "https://gitee.com/noatin/noatin-repo/raw/main/noatin-chatgpt-client/assets/icon.png" \
+    --icon-url "https://gitee.com/noatin/noatin-repo/raw/main/chatgpt-client/assets/icon.png" \
     --output-dir /tmp/out
 EOF
     exit "$rc"
@@ -139,10 +139,6 @@ require_arg "--project-license" "$PROJECT_LICENSE"
 require_arg "--version" "$VERSION"
 require_arg "--icon-url" "$ICON_URL"
 
-if [[ ! "$PN_NAME" =~ ^noatin- ]]; then
-    PN_NAME="noatin-${PN_NAME}"
-fi
-
 if [[ ! "$PN_NAME" =~ $PKG_NAME_RE ]]; then
     echo "错误: 包名 '$PN_NAME' 不符合 Debian Policy (仅小写字母、数字、+.- 字符)" >&2
     exit 1
@@ -153,8 +149,8 @@ if [[ ! -f "$TEMPLATE" ]]; then
     exit 1
 fi
 
-TOOL_NAME="${PN_NAME#noatin-}"
-APPSTREAM_ID="com.noatin.${TOOL_NAME}"
+TOOL_NAME="${PN_NAME}"
+APPSTREAM_ID="com.github.${TOOL_NAME}"
 DESKTOP_ID="${APPSTREAM_ID}.desktop"
 
 if [[ -z "$BINARY_NAME" ]]; then

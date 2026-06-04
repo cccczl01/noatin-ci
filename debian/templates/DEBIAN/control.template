@@ -2,8 +2,8 @@
 # 使用 Bash 变量替换语法，配合 gen-control.sh 或 envsubst 使用
 #
 # ── 字段说明 (Debian Policy Manual §5.1) ──
-# ${PKG_NAME}           : 包名，必须以 noatin- 开头，全小写，允许连字符
-#                         示例: noatin-chatgpt-client
+# ${PKG_NAME}           : 包名，全小写，允许连字符
+#                         示例: chatgpt-client
 # ${VERSION}            : 版本号，Debian 格式 {upstream}-{debian_revision}
 #                         示例: 1.0.0-1
 # ${ARCHITECTURE}       : 目标架构，固定值 amd64
@@ -24,7 +24,7 @@
 #                         由 gen-control.sh 将 --long-desc 中的换行分割为多行并缩进
 #
 # ── 可用变量 (由 gen-control.sh 注入) ──
-# ${PKG_NAME}           (必填 - 由 --pkg-name 传入，自动补 noatin- 前缀)
+# ${PKG_NAME}           (必填 - 由 --pkg-name 传入)
 # ${VERSION}            (必填 - 由 --version 传入)
 # ${ARCHITECTURE}       (固定 - 由脚本自动设为 amd64)
 # ${MAINTAINER}         (固定 - 由脚本自动设为 Noatin OS Team <repo@cccczl.top>)

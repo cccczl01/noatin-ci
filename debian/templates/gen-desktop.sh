@@ -30,11 +30,11 @@ cat <<'EOF'
 [--terminal <true|false>] [--output-dir <目录>]
 
 必填参数:
---pkg-name <name>       包名 (自动添加 noatin- 前缀，除非已有)
+--pkg-name <name>       包名
 --zh-name <中文名称>     .desktop 文件中文显示名称
 --zh-comment <中文注释>  .desktop 文件中文简短描述
---exec <可执行路径>      可执行文件绝对路径 (如 /usr/bin/noatin-chatgpt-client)
---icon <图标路径>        图标文件路径 (如 /usr/share/pixmaps/com.noatin.chatgpt-client.png)
+--exec <可执行路径>      可执行文件绝对路径 (如 /usr/bin/chatgpt-client)
+--icon <图标路径>        图标文件路径 (如 /usr/share/pixmaps/com.github.chatgpt-client.png)
 
 可选参数:
 --categories <分类>     应用分类 (默认 Utility;)
@@ -50,8 +50,8 @@ cat <<'EOF'
 gen-desktop.sh --pkg-name chatgpt-client \
   --zh-name "ChatGPT 客户端" \
   --zh-comment "基于 Electron 的 ChatGPT 桌面客户端" \
-  --exec /usr/bin/noatin-chatgpt-client \
-  --icon /usr/share/pixmaps/com.noatin.chatgpt-client.png \
+  --exec /usr/bin/chatgpt-client \
+  --icon /usr/share/pixmaps/com.github.chatgpt-client.png \
   --zh-keywords "AI;聊天;ChatGPT;" \
   --output-dir /tmp/out
 EOF
@@ -118,10 +118,6 @@ require_arg "--zh-comment" "$ZH_COMMENT"
 require_arg "--exec" "$EXEC_PATH"
 require_arg "--icon" "$ICON_PATH"
 
-if [[ ! "$PN_NAME" =~ ^noatin- ]]; then
-    PN_NAME="noatin-${PN_NAME}"
-fi
-
 if [[ ! "$PN_NAME" =~ $PKG_NAME_RE ]]; then
     echo "错误: 包名 '$PN_NAME' 不符合 Debian Policy (仅小写字母、数字、+.- 字符)" >&2
     exit 1
@@ -132,8 +128,8 @@ if [[ ! -f "$TEMPLATE" ]]; then
     exit 1
 fi
 
-TOOL_NAME="${PN_NAME#noatin-}"
-APPSTREAM_ID="com.noatin.${TOOL_NAME}"
+TOOL_NAME="${PN_NAME}"
+APPSTREAM_ID="com.github.${TOOL_NAME}"
 
 if [[ -z "$CATEGORIES" ]]; then
     CATEGORIES="Utility;"
@@ -144,7 +140,7 @@ if [[ -z "$EN_NAME" ]]; then
 fi
 
 if [[ -z "$EN_COMMENT" ]]; then
-    EN_COMMENT="$EN_NAME for Noatin OS"
+    EN_COMMENT="$EN_NAME"
 fi
 
 if [[ -z "$TERMINAL" ]]; then

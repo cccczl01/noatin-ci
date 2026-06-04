@@ -13,7 +13,7 @@ usage() {
 用法: gen-postinst.sh --pkg-name <name> [--output-dir <dir>] [--has-desktop <yes|no>]
 
 必填参数:
-  --pkg-name <name>      包名 (自动添加 noatin- 前缀，除非已有)
+  --pkg-name <name>      包名
 
 可选参数:
   --output-dir <dir>     输出目录 (写入 DIR/DEBIAN/postinst，默认 stdout)
@@ -46,10 +46,6 @@ done
 if [[ -z "$PN_NAME" ]]; then
     echo "错误: --pkg-name 为必填项" >&2
     usage
-fi
-
-if [[ ! "$PN_NAME" =~ ^noatin- ]]; then
-    PN_NAME="noatin-${PN_NAME}"
 fi
 
 if [[ ! "$PN_NAME" =~ $PKG_NAME_RE ]]; then

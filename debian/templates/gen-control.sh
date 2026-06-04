@@ -26,7 +26,7 @@ usage() {
 用法: gen-control.sh --pkg-name <name> --version <ver> --description <desc> [options]
 
 必填参数:
-  --pkg-name <name>       包名 (自动添加 noatin- 前缀，除非已有)
+  --pkg-name <name>       包名
   --version <ver>         Debian 版本号 (如 1.0.0-1)
   --description <desc>    简短描述 (≤60 字符，中文)
   --long-desc <desc>      长描述 (支持 \n 换行，每行自动缩进)
@@ -83,10 +83,6 @@ done
 if [[ -z "$PKG_NAME" || -z "$VERSION" || -z "$DESCRIPTION" || -z "$LONG_DESC" ]]; then
     echo "错误: --pkg-name, --version, --description, --long-desc 为必填项" >&2
     usage
-fi
-
-if [[ ! "$PKG_NAME" =~ ^noatin- ]]; then
-    PKG_NAME="noatin-${PKG_NAME}"
 fi
 
 if [[ ! "$PKG_NAME" =~ ^${PKG_NAME_RE}$ ]]; then

@@ -163,11 +163,11 @@ for pkg_name in "${PACKAGES[@]}"; do
     UPSTREAM_VERSION="${CONF[upstream_version]}"
     DEBIAN_REVISION="${CONF[debian_revision]}"
     DEBIAN_VER="${UPSTREAM_VERSION}-${DEBIAN_REVISION}"
-    PKG="noatin-${NAME}"
+    PKG="${NAME}"
 
     PKG_REPO_DIR="${REPO_DIR}/${PKG}/pool/${DEBIAN_VER}"
     REPO_DEP11_DIR="${REPO_DIR}/dep11"
-    SRC_DEP11_YML="${PKG_DIR}/dep11/com.noatin.${NAME}.yml"
+    SRC_DEP11_YML="${PKG_DIR}/dep11/com.github.${NAME}.yml"
 
     if [[ "${DRY_RUN}" = "true" ]]; then
         echo "  [DRY-RUN] 构建: build-package.sh --pkg-dir ${PKG_DIR}"

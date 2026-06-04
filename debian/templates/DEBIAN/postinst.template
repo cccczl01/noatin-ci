@@ -3,7 +3,7 @@ set -e
 
 # ${PKG_NAME} postinst — 安装后更新 desktop 数据库和 AppStream 缓存
 # 占位符:
-#   ${PKG_NAME} : deb 包名 (如 noatin-chatgpt-client)
+#   ${PKG_NAME} : deb 包名 (如 chatgpt-client)
 #   ${HAS_DESKTOP} : yes/no (由 gen-postinst.sh 替换)
 
 HAS_DESKTOP="${HAS_DESKTOP}"

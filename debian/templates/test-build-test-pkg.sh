@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-TEST_PKG="noatin-test-dummy"
+TEST_PKG="test-dummy"
 TEST_VERSION="0.1.0-1"
 DEB_FILE=""
 STAGING_DIR=""
@@ -85,7 +85,7 @@ echo "=== 步骤 2.7: 生成 metainfo 文件 ==="
     --version "$TEST_VERSION" \
     --output-dir "$STAGING_DIR"
 mkdir -p "$STAGING_DIR/usr/share/metainfo"
-cp "$STAGING_DIR/metainfo/com.noatin.test-dummy.metainfo.xml" "$STAGING_DIR/usr/share/metainfo/"
+cp "$STAGING_DIR/metainfo/com.github.test-dummy.metainfo.xml" "$STAGING_DIR/usr/share/metainfo/"
 rm -rf "$STAGING_DIR/metainfo"
 
 echo "=== 步骤 2.8: 生成 .desktop 文件 ==="
@@ -93,12 +93,12 @@ echo "=== 步骤 2.8: 生成 .desktop 文件 ==="
     --pkg-name test-dummy \
     --zh-name "测试包" \
     --zh-comment "用于验证 .desktop 模板的测试包" \
-    --exec "/usr/bin/noatin-test-dummy" \
-    --icon "/usr/share/pixmaps/com.noatin.test-dummy.png" \
+    --exec "/usr/bin/test-dummy" \
+    --icon "/usr/share/pixmaps/com.github.test-dummy.png" \
     --zh-keywords "测试;AI;" \
     --output-dir "$STAGING_DIR"
 mkdir -p "$STAGING_DIR/usr/share/applications"
-cp "$STAGING_DIR/desktop/com.noatin.test-dummy.desktop" "$STAGING_DIR/usr/share/applications/"
+cp "$STAGING_DIR/desktop/com.github.test-dummy.desktop" "$STAGING_DIR/usr/share/applications/"
 rm -rf "$STAGING_DIR/desktop"
 
 echo "=== 步骤 2.9: 生成 DEP-11 YAML 片段 ==="
@@ -110,25 +110,25 @@ echo "=== 步骤 2.9: 生成 DEP-11 YAML 片段 ==="
     --developer-name "Noatin OS Team" \
     --project-license "MIT" \
     --version "$TEST_VERSION" \
-    --icon-url "https://gitee.com/noatin/noatin-repo/raw/main/noatin-test-dummy/assets/icon.png" \
+    --icon-url "https://gitee.com/noatin/noatin-repo/raw/main/test-dummy/assets/icon.png" \
     --output-dir "$STAGING_DIR"
 mkdir -p "$STAGING_DIR/repo/dep11"
-cp "$STAGING_DIR/dep11/com.noatin.test-dummy.yml" "$STAGING_DIR/repo/dep11/"
+cp "$STAGING_DIR/dep11/com.github.test-dummy.yml" "$STAGING_DIR/repo/dep11/"
 rm -rf "$STAGING_DIR/dep11"
 
-echo "=== 步骤 3: 创建 /usr/bin/noatin-test-dummy 占位脚本 ==="
+echo "=== 步骤 3: 创建 /usr/bin/test-dummy 占位脚本 ==="
 mkdir -p "$STAGING_DIR/usr/bin"
-cat > "$STAGING_DIR/usr/bin/noatin-test-dummy" <<'SCRIPTEOF'
+cat > "$STAGING_DIR/usr/bin/test-dummy" <<'SCRIPTEOF'
 #!/bin/bash
-echo "noatin-test-dummy: Hello from Noatin OS!"
+echo "test-dummy: Hello from test!"
 SCRIPTEOF
-chmod 755 "$STAGING_DIR/usr/bin/noatin-test-dummy"
+chmod 755 "$STAGING_DIR/usr/bin/test-dummy"
 
 echo "=== 步骤 4: 创建 copyright 文件 ==="
 mkdir -p "$STAGING_DIR/usr/share/doc/$TEST_PKG"
 cat > "$STAGING_DIR/usr/share/doc/$TEST_PKG/copyright" <<'COPYEOF'
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: noatin-test-dummy
+Upstream-Name: test-dummy
 Upstream-Contact: Noatin OS Team <repo@cccczl.top>
 
 Files: *
@@ -158,7 +158,7 @@ COPYEOF
 echo "=== 步骤 5: 创建 changelog 文件 ==="
 mkdir -p "$STAGING_DIR/usr/share/doc/$TEST_PKG"
 cat > "$STAGING_DIR/usr/share/doc/$TEST_PKG/changelog" <<'CHANGEOF'
-noatin-test-dummy (0.1.0-1) unstable; urgency=medium
+test-dummy (0.1.0-1) unstable; urgency=medium
 
   * Test build for control template verification.
 
@@ -263,7 +263,7 @@ fi
 rm -rf "$CTRL_TMP"
 
 echo "--- 验证 metainfo 文件存在 ---"
-METAINFO_PATH="/usr/share/metainfo/com.noatin.test-dummy.metainfo.xml"
+METAINFO_PATH="/usr/share/metainfo/com.github.test-dummy.metainfo.xml"
 if dpkg-deb -c "$DEB_FILE" | grep -q "$METAINFO_PATH"; then
     echo "✓ deb 包包含 $METAINFO_PATH"
 else
@@ -296,8 +296,8 @@ fi
         rm -f "$METAINFO_TMP"
         exit 1
     fi
-    if grep -q '<id>com\.noatin\.' "$METAINFO_TMP"; then
-        echo "✓ metainfo <id> 为 com.noatin. 格式"
+    if grep -q '<id>com\.github\.' "$METAINFO_TMP"; then
+        echo "✓ metainfo <id> 为 com.github. 格式"
     else
         echo "✗ metainfo <id> 格式不正确" >&2
         rm -f "$METAINFO_TMP"
@@ -326,7 +326,7 @@ fi
 rm -f "$METAINFO_TMP"
 
 echo "--- 验证 .desktop 文件存在 ---"
-DESKTOP_PATH="/usr/share/applications/com.noatin.test-dummy.desktop"
+DESKTOP_PATH="/usr/share/applications/com.github.test-dummy.desktop"
 if dpkg-deb -c "$DEB_FILE" | grep -q "$DESKTOP_PATH"; then
     echo "✓ deb 包包含 $DESKTOP_PATH"
 else
@@ -399,7 +399,7 @@ fi
 rm -f "$DESKTOP_TMP"
 
 echo "--- 验证 DEP-11 YAML 片段 ---"
-DEP11_YAML_PATH="repo/dep11/com.noatin.test-dummy.yml"
+DEP11_YAML_PATH="repo/dep11/com.github.test-dummy.yml"
 if [[ -f "$STAGING_DIR/$DEP11_YAML_PATH" ]]; then
     echo "✓ $DEP11_YAML_PATH 存在"
 else
@@ -407,10 +407,10 @@ else
     exit 1
 fi
 DEP11_CONTENT=$(cat "$STAGING_DIR/$DEP11_YAML_PATH")
-if echo "$DEP11_CONTENT" | grep -q 'ID: com.noatin.test-dummy'; then
-    echo "✓ YAML 包含 ID: com.noatin.test-dummy"
+if echo "$DEP11_CONTENT" | grep -q 'ID: com.github.test-dummy'; then
+    echo "✓ YAML 包含 ID: com.github.test-dummy"
 else
-    echo "✗ YAML 不包含 ID: com.noatin.test-dummy" >&2
+    echo "✗ YAML 不包含 ID: com.github.test-dummy" >&2
     exit 1
 fi
 if echo "$DEP11_CONTENT" | grep -q 'Type: desktop-application'; then

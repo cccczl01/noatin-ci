@@ -34,6 +34,23 @@ fetch_source() {
             cp -r "${extract_dir}/package/"* "$staging/"
             rm -rf "$tmp"
             ;;
+        deb-url)
+            if [[ -z "$source" ]]; then
+                echo "错误: deb-url 类型需要 fetch_source (deb 下载 URL)" >&2
+                exit 1
+            fi
+            local tmp
+            tmp=$(mktemp -d)
+            local deb_file="${tmp}/upstream.deb"
+            echo "    下载: ${source}"
+            if ! wget -q --show-progress -O "$deb_file" "$source" 2>&1; then
+                echo "错误: 下载失败: $source" >&2
+                rm -rf "$tmp"
+                exit 1
+            fi
+            dpkg-deb -x "$deb_file" "$staging"
+            rm -rf "$tmp"
+            ;;
         *)
             echo "错误: 未知的 fetch_type: $type" >&2
             exit 1

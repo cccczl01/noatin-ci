@@ -27,7 +27,7 @@ usage() {
 用法: ci-build.sh [OPTIONS]
 
 CI 编排脚本：检测 debian/packages/ 下的包变更，调用 build-package.sh 构建 deb，
-GPG 签名后推送到三平台仓库，并触发 VPS 索引更新。
+GPG 签名后上传到 R2 + 推送到三平台仓库，并触发 VPS 索引更新。
 
 Options:
   --dry-run       只输出将要构建的包和推送目标，不执行实际构建
@@ -35,11 +35,15 @@ Options:
   --help          显示帮助信息
 
 Environment Variables (CI secrets):
-  GPG_PRIVATE_KEY   GPG 私钥（ASCII-armored），用于 deb 包签名
-  GITEE_TOKEN       Gitee Personal Access Token
-  GITHUB_TOKEN      GitHub Personal Access Token
-  GITCODE_TOKEN     GitCode Personal Access Token
-  VPS_API_KEY       VPS API 密钥（用于 DEP-11 上传和索引更新回调）
+  GPG_PRIVATE_KEY       GPG 私钥（ASCII-armored），用于 deb 包签名
+  GITEE_TOKEN           Gitee Personal Access Token
+  GITHUB_TOKEN          GitHub Personal Access Token
+  GITCODE_TOKEN         GitCode Personal Access Token
+  VPS_API_KEY           VPS API 密钥（用于 DEP-11 上传和索引更新回调）
+  R2_ACCESS_KEY_ID      Cloudflare R2 Access Key ID（上传 deb 到 R2）
+  R2_SECRET_ACCESS_KEY  Cloudflare R2 Secret Access Key
+  R2_ENDPOINT           Cloudflare R2 S3 Endpoint URL
+  R2_BUCKET             Cloudflare R2 存储桶名称
 
 Exit Codes:
   0    所有包构建成功（或无需构建）
@@ -169,6 +173,7 @@ for pkg_name in "${PACKAGES[@]}"; do
         echo "  [DRY-RUN] 构建: build-package.sh --pkg-dir ${PKG_DIR}"
         echo "  [DRY-RUN] 输出: ${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb"
         echo "  [DRY-RUN] DEP-11: ${SRC_DEP11_YML} → ${REPO_DEP11_DIR}/"
+        echo "  [DRY-RUN] R2: ${PKG}/pool/${DEBIAN_VER}/$(basename "${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb")"
         echo "  [DRY-RUN] 推送: Gitee → GitHub (sync-mirrors.sh) → GitCode"
         echo "  [DRY-RUN] VPS: DEP-11 上传 + 索引更新回调"
         echo "  SUCCESS: ${pkg_name} (干跑)"
@@ -216,6 +221,27 @@ for pkg_name in "${PACKAGES[@]}"; do
         echo "  COPY-DEP11: ${SRC_DEP11_YML} → ${REPO_DEP11_DIR}/"
     else
         echo "  WARN: DEP-11 YAML 不存在: ${SRC_DEP11_YML}"
+    fi
+
+    if [[ -n "${R2_ACCESS_KEY_ID:-}" && -n "${R2_ENDPOINT:-}" && -n "${R2_BUCKET:-}" ]]; then
+        R2_KEY="${PKG}/pool/${DEBIAN_VER}/$(basename "$DEB_FILE")"
+        echo "  R2: 上传 ${R2_KEY}..."
+        set +e
+        r2_output=$(AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
+            AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+            AWS_DEFAULT_REGION=auto \
+            aws s3 cp "$DEB_FILE" "s3://${R2_BUCKET}/${R2_KEY}" \
+            --endpoint-url "${R2_ENDPOINT}" 2>&1)
+        R2_RC=$?
+        set -e
+        if [[ $R2_RC -eq 0 ]]; then
+            echo "  R2: 上传成功"
+        else
+            echo "  WARN: R2 上传失败 (exit code: ${R2_RC})"
+            echo "  R2-DEBUG: ${r2_output}" | head -3
+        fi
+    else
+        echo "  R2: 跳过（R2 环境变量未设置）"
     fi
 
     if [[ -n "${GPG_PRIVATE_KEY:-}" ]]; then

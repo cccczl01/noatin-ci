@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq dpkg-dev gnupg lintian git
+          sudo apt-get install -y -qq dpkg-dev gnupg lintian git awscli
 
       - name: Run CI build
         env:
@@ -36,5 +36,9 @@ jobs:
           VPS_API_KEY: ${{ secrets.VPS_API_KEY }}
           VPS_DEP11_URL: ${{ secrets.VPS_DEP11_URL }}
           VPS_CALLBACK_URL: ${{ secrets.VPS_CALLBACK_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           bash debian/scripts/ci-build.sh

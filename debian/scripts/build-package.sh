@@ -133,7 +133,10 @@ FETCH_SOURCE="${CONF[fetch_source]:-}"
 
 HAS_DESKTOP="${CONF[has_desktop]:-yes}"
 
-required_fields="name upstream_version debian_revision description long_desc zh_name zh_summary zh_desc developer_name project_license exec icon icon_url"
+required_fields="name upstream_version debian_revision description long_desc zh_name zh_summary zh_desc developer_name project_license exec"
+if [[ "$HAS_DESKTOP" = "yes" ]]; then
+    required_fields="$required_fields icon icon_url"
+fi
 for field in $required_fields; do
     if [[ -z "${CONF[$field]:-}" ]]; then
         echo "错误: build.conf 缺少必填字段: $field" >&2
@@ -191,7 +194,16 @@ if [[ "$FETCH_TYPE" == "deb-url" ]]; then
     orig_version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null || echo "$DEBIAN_VER")
     orig_pkg_name=$(dpkg-deb -f "$deb_file" Package 2>/dev/null || echo "$PKG_NAME")
 
-    DEB_FILE="${OUTPUT_DIR}/${orig_pkg_name}_${orig_version}_amd64.deb"
+    # 提取原始 deb 中的 desktop 文件，用于 DEP-11 的 desktop-id
+    extract_dir="${tmp}/extract"
+    mkdir -p "$extract_dir"
+    dpkg-deb -x "$deb_file" "$extract_dir"
+    upstream_desktop=""
+    if [[ -d "${extract_dir}/usr/share/applications" ]]; then
+        upstream_desktop=$(find "${extract_dir}/usr/share/applications" -maxdepth 1 -name '*.desktop' -type f -printf '%f\n' 2>/dev/null | head -1)
+    fi
+
+    DEB_FILE="${OUTPUT_DIR}/${PKG_NAME}_${DEBIAN_VER}_amd64.deb"
     cp "$deb_file" "$DEB_FILE"
     rm -rf "$tmp"
 
@@ -207,6 +219,7 @@ if [[ "$FETCH_TYPE" == "deb-url" ]]; then
         --icon-url "$ICON_URL" \
         ${HOMEPAGE:+--homepage "$HOMEPAGE"} \
         ${SCREENSHOT_URL:+--screenshot-url "$SCREENSHOT_URL"} \
+        ${upstream_desktop:+--desktop-id "$upstream_desktop"} \
         --output-dir "$PKG_DIR"
 
     echo ""
@@ -230,8 +243,10 @@ echo "  staging: ${STAGING_DIR}"
 echo ""
 
 mkdir -p "${STAGING_DIR}/DEBIAN"
-mkdir -p "${STAGING_DIR}/usr/share/metainfo"
-mkdir -p "${STAGING_DIR}/usr/share/applications"
+if [[ "$HAS_DESKTOP" = "yes" ]]; then
+    mkdir -p "${STAGING_DIR}/usr/share/metainfo"
+    mkdir -p "${STAGING_DIR}/usr/share/applications"
+fi
 mkdir -p "${STAGING_DIR}/usr/share/doc/${PKG_NAME}"
 
 echo "--- 获取源码 (fetch_type=${FETCH_TYPE}) ---"
@@ -260,42 +275,44 @@ echo "--- 生成 postrm ---"
     ${HAS_DESKTOP:+--has-desktop "$HAS_DESKTOP"} \
     --output-dir "$STAGING_DIR"
 
-echo "--- 生成 metainfo ---"
-"${TEMPLATES_DIR}/gen-metainfo.sh" \
-    --pkg-name "$NAME" \
-    --zh-name "$ZH_NAME" \
-    --zh-summary "$ZH_SUMMARY" \
-    --zh-description "$ZH_DESC" \
-    --developer-name "$DEVELOPER_NAME" \
-    --project-license "$PROJECT_LICENSE" \
-    --version "$UPSTREAM_VERSION" \
-    ${HOMEPAGE:+--homepage "$HOMEPAGE"} \
-    ${SCREENSHOT_URL:+--screenshot-url "$SCREENSHOT_URL"} \
-    --output-dir "$STAGING_DIR"
+if [[ "$HAS_DESKTOP" = "yes" ]]; then
+    echo "--- 生成 metainfo ---"
+    "${TEMPLATES_DIR}/gen-metainfo.sh" \
+        --pkg-name "$NAME" \
+        --zh-name "$ZH_NAME" \
+        --zh-summary "$ZH_SUMMARY" \
+        --zh-description "$ZH_DESC" \
+        --developer-name "$DEVELOPER_NAME" \
+        --project-license "$PROJECT_LICENSE" \
+        --version "$UPSTREAM_VERSION" \
+        ${HOMEPAGE:+--homepage "$HOMEPAGE"} \
+        ${SCREENSHOT_URL:+--screenshot-url "$SCREENSHOT_URL"} \
+        --output-dir "$STAGING_DIR"
 
-echo "--- 生成 desktop ---"
-"${TEMPLATES_DIR}/gen-desktop.sh" \
-    --pkg-name "$NAME" \
-    --zh-name "$ZH_NAME" \
-    --zh-comment "$DESCRIPTION" \
-    --exec "$EXEC_PATH" \
-    --icon "$ICON_PATH" \
-    ${ZH_KEYWORDS:+--zh-keywords "$ZH_KEYWORDS"} \
-    --output-dir "$STAGING_DIR"
+    echo "--- 生成 desktop ---"
+    "${TEMPLATES_DIR}/gen-desktop.sh" \
+        --pkg-name "$NAME" \
+        --zh-name "$ZH_NAME" \
+        --zh-comment "$DESCRIPTION" \
+        --exec "$EXEC_PATH" \
+        --icon "$ICON_PATH" \
+        ${ZH_KEYWORDS:+--zh-keywords "$ZH_KEYWORDS"} \
+        --output-dir "$STAGING_DIR"
 
-echo "--- 生成 DEP-11 ---"
-"${TEMPLATES_DIR}/gen-dep11.sh" \
-    --pkg-name "$NAME" \
-    --zh-name "$ZH_NAME" \
-    --zh-summary "$ZH_SUMMARY" \
-    --zh-description "$ZH_DESC" \
-    --developer-name "$DEVELOPER_NAME" \
-    --project-license "$PROJECT_LICENSE" \
-    --version "$UPSTREAM_VERSION" \
-    --icon-url "$ICON_URL" \
-    ${HOMEPAGE:+--homepage "$HOMEPAGE"} \
-    ${SCREENSHOT_URL:+--screenshot-url "$SCREENSHOT_URL"} \
-    --output-dir "$PKG_DIR"
+    echo "--- 生成 DEP-11 ---"
+    "${TEMPLATES_DIR}/gen-dep11.sh" \
+        --pkg-name "$NAME" \
+        --zh-name "$ZH_NAME" \
+        --zh-summary "$ZH_SUMMARY" \
+        --zh-description "$ZH_DESC" \
+        --developer-name "$DEVELOPER_NAME" \
+        --project-license "$PROJECT_LICENSE" \
+        --version "$UPSTREAM_VERSION" \
+        --icon-url "$ICON_URL" \
+        ${HOMEPAGE:+--homepage "$HOMEPAGE"} \
+        ${SCREENSHOT_URL:+--screenshot-url "$SCREENSHOT_URL"} \
+        --output-dir "$PKG_DIR"
+fi
 
 echo "--- 生成 copyright ---"
 cat > "${STAGING_DIR}/usr/share/doc/${PKG_NAME}/copyright" << COPYEOF

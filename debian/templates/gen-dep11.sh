@@ -17,6 +17,8 @@ CATEGORIES=""
 BINARY_NAME=""
 VERSION=""
 RELEASE_DATE=""
+DESKTOP_ID=""
+APPSTREAM_ID_OVERRIDE=""
 OUTPUT_DIR=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="${SCRIPT_DIR}/dep11/dep11.template.yml"
@@ -32,6 +34,7 @@ usage() {
     [--en-name <英文名>] [--en-description <英文描述>]
     [--categories <分类>] [--binary-name <名称>]
     [--release-date <日期>] [--output-dir <目录>]
+  [--desktop-id <desktop文件名>] [--appstream-id <ID>]
 
 必填参数:
   --pkg-name <name>           包名
@@ -52,6 +55,8 @@ usage() {
   --binary-name <名称>        可执行文件名 (默认与 pkg-name 一致)
   --release-date <日期>       发布日期 (默认当天，格式 YYYY-MM-DD)
   --output-dir <目录>         输出目录 (写入 DIR/dep11/，默认 stdout)
+  --desktop-id <名称>         desktop 文件名 (如 chat-gpt.desktop，默认 ${APPSTREAM_ID}.desktop)
+  --appstream-id <ID>          AppStream 组件 ID (默认 com.github.${TOOL_NAME})
 
 示例:
   gen-dep11.sh --pkg-name chatgpt-client \
@@ -125,6 +130,12 @@ while [[ $# -gt 0 ]]; do
     --output-dir)
         [[ -z "${2:-}" || "$2" == -* ]] && { echo "错误: --output-dir 需要参数" >&2; usage; }
         OUTPUT_DIR="$2"; shift 2 ;;
+    --desktop-id)
+        [[ -z "${2:-}" || "$2" == -* ]] && { echo "错误: --desktop-id 需要参数" >&2; usage; }
+        DESKTOP_ID="$2"; shift 2 ;;
+    --appstream-id)
+        [[ -z "${2:-}" || "$2" == -* ]] && { echo "错误: --appstream-id 需要参数" >&2; usage; }
+        APPSTREAM_ID_OVERRIDE="$2"; shift 2 ;;
     -h|--help) usage 0 ;;
     *) echo "未知参数: $1" >&2; usage ;;
     esac
@@ -150,8 +161,14 @@ if [[ ! -f "$TEMPLATE" ]]; then
 fi
 
 TOOL_NAME="${PN_NAME}"
-APPSTREAM_ID="com.github.${TOOL_NAME}"
-DESKTOP_ID="${APPSTREAM_ID}.desktop"
+if [[ -n "$APPSTREAM_ID_OVERRIDE" ]]; then
+    APPSTREAM_ID="$APPSTREAM_ID_OVERRIDE"
+else
+    APPSTREAM_ID="com.github.${TOOL_NAME}"
+fi
+if [[ -z "$DESKTOP_ID" ]]; then
+    DESKTOP_ID="${APPSTREAM_ID}.desktop"
+fi
 
 if [[ -z "$BINARY_NAME" ]]; then
     BINARY_NAME="$PN_NAME"

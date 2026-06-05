@@ -188,21 +188,47 @@ if [[ "$FETCH_TYPE" == "deb-url" ]]; then
     DOWNLOAD_URL="${CONF[download_url]:-${FETCH_SOURCE}}"
     DOWNLOAD_SHA256="${CONF[download_sha256]:-}"
 
+    # CDN 代理加速下载（仅构建时使用，metadata.json 中仍保留原始 upstream_url）
+    CDN_PROXY="${CDN_PROXY:-https://gh-proxy.com/}"
+
     echo "--- 下载第三方 deb ---"
     echo "    来源: ${DOWNLOAD_URL}"
-    for attempt in 1 2 3; do
-        if wget -q --show-progress -O "$deb_file" "$DOWNLOAD_URL" 2>&1; then
-            break
-        fi
-        if [[ $attempt -lt 3 ]]; then
-            echo "    重试 ${attempt}/3 ..."
-            sleep 10
+
+    # 如果 CDN_PROXY 非空，优先走 CDN；失败后回退直连
+    download_deb() {
+        local url="$1" dest="$2" label="$3"
+        for attempt in 1 2 3; do
+            if wget -q --show-progress -O "$dest" "$url" 2>&1; then
+                return 0
+            fi
+            if [[ $attempt -lt 3 ]]; then
+                echo "    ${label} 重试 ${attempt}/3 ..."
+                sleep 10
+            fi
+        done
+        return 1
+    }
+
+    if [[ -n "$CDN_PROXY" ]]; then
+        CDN_URL="${CDN_PROXY}${DOWNLOAD_URL}"
+        echo "    CDN 代理: ${CDN_URL}"
+        if download_deb "$CDN_URL" "$deb_file" "CDN"; then
+            echo "    CDN 下载成功"
         else
+            echo "    CDN 下载失败，回退直连..."
+            if ! download_deb "$DOWNLOAD_URL" "$deb_file" "直连"; then
+                echo "错误: 下载失败（CDN + 直连均失败）: $DOWNLOAD_URL" >&2
+                rm -rf "$tmp"
+                exit 2
+            fi
+        fi
+    else
+        if ! download_deb "$DOWNLOAD_URL" "$deb_file" ""; then
             echo "错误: 下载失败（重试 3 次后）: $DOWNLOAD_URL" >&2
             rm -rf "$tmp"
             exit 2
         fi
-    done
+    fi
 
     if [[ -n "$DOWNLOAD_SHA256" ]]; then
         echo "--- 校验 sha256 ---"

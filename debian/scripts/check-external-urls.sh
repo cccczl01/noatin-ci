@@ -43,7 +43,7 @@ if [ -z "${API_RESPONSE}" ]; then
     exit 1
 fi
 
-META_PATHS=$(echo "${API_RESPONSE}" | grep -oP '"path":"\K[^"]+/pool/[^"]+/metadata\.json(?=")' || true)
+META_PATHS=$(echo "${API_RESPONSE}" | grep -oP '"path":\s*"\K[^"]+/pool/[^"]+/metadata\.json(?=")' || true)
 
 if [ -z "${META_PATHS}" ]; then
     echo "未发现 external 包，跳过检查"

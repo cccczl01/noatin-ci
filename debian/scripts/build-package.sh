@@ -177,35 +177,132 @@ fi
 
 PKG_NAME="${NAME}"
 
-# --- deb-url 模式：直接采用原包，不重复打包 ---
+# --- deb-url 模式：仅提取元数据，不存储 deb 到仓库 ---
 if [[ "$FETCH_TYPE" == "deb-url" ]]; then
     mkdir -p "$OUTPUT_DIR"
     tmp=$(mktemp -d)
     deb_file="${tmp}/upstream.deb"
-    echo "--- 下载原始 deb ---"
-    echo "    来源: ${FETCH_SOURCE}"
-    if ! wget -q --show-progress -O "$deb_file" "$FETCH_SOURCE" 2>&1; then
-        echo "错误: 下载失败: $FETCH_SOURCE" >&2
-        rm -rf "$tmp"
-        exit 1
-    fi
-
-    # 从原始 deb 中提取版本信息
-    orig_version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null || echo "$DEBIAN_VER")
-    orig_pkg_name=$(dpkg-deb -f "$deb_file" Package 2>/dev/null || echo "$PKG_NAME")
-
-    # 提取原始 deb 中的 desktop 文件，用于 DEP-11 的 desktop-id
     extract_dir="${tmp}/extract"
     mkdir -p "$extract_dir"
+
+    DOWNLOAD_URL="${CONF[download_url]:-${FETCH_SOURCE}}"
+    DOWNLOAD_SHA256="${CONF[download_sha256]:-}"
+
+    echo "--- 下载第三方 deb ---"
+    echo "    来源: ${DOWNLOAD_URL}"
+    for attempt in 1 2 3; do
+        if wget -q --show-progress -O "$deb_file" "$DOWNLOAD_URL" 2>&1; then
+            break
+        fi
+        if [[ $attempt -lt 3 ]]; then
+            echo "    重试 ${attempt}/3 ..."
+            sleep 10
+        else
+            echo "错误: 下载失败（重试 3 次后）: $DOWNLOAD_URL" >&2
+            rm -rf "$tmp"
+            exit 2
+        fi
+    done
+
+    if [[ -n "$DOWNLOAD_SHA256" ]]; then
+        echo "--- 校验 sha256 ---"
+        actual_sha256=$(sha256sum "$deb_file" | awk '{print $1}')
+        if [[ "$actual_sha256" != "$DOWNLOAD_SHA256" ]]; then
+            echo "错误: sha256 校验和不匹配" >&2
+            echo "  期望: $DOWNLOAD_SHA256" >&2
+            echo "  实际: $actual_sha256" >&2
+            rm -rf "$tmp"
+            exit 3
+        fi
+        echo "    OK: sha256 匹配"
+    fi
+
+    echo "--- 提取元数据 ---"
+    orig_version=$(dpkg-deb -f "$deb_file" Version 2>/dev/null || echo "$DEBIAN_VER")
+    orig_pkg_name=$(dpkg-deb -f "$deb_file" Package 2>/dev/null || echo "$PKG_NAME")
+    orig_arch=$(dpkg-deb -f "$deb_file" Architecture 2>/dev/null || echo "amd64")
+    orig_depends=$(dpkg-deb -f "$deb_file" Depends 2>/dev/null || echo "")
+    orig_desc=$(dpkg-deb -f "$deb_file" Description 2>/dev/null || echo "$DESCRIPTION")
+    orig_maintainer=$(dpkg-deb -f "$deb_file" Maintainer 2>/dev/null || echo "Noatin OS Team <repo@cccczl.top>")
+    orig_section=$(dpkg-deb -f "$deb_file" Section 2>/dev/null || echo "utils")
+    orig_priority=$(dpkg-deb -f "$deb_file" Priority 2>/dev/null || echo "optional")
+    orig_installed_size=$(dpkg-deb -f "$deb_file" Installed-Size 2>/dev/null || echo "0")
+    deb_size=$(stat -c%s "$deb_file" 2>/dev/null || echo "0")
+    deb_sha256=$(sha256sum "$deb_file" | awk '{print $1}')
+    deb_md5=$(md5sum "$deb_file" 2>/dev/null | awk '{print $1}' || echo "")
+
     dpkg-deb -x "$deb_file" "$extract_dir"
     upstream_desktop=""
     if [[ -d "${extract_dir}/usr/share/applications" ]]; then
         upstream_desktop=$(find "${extract_dir}/usr/share/applications" -maxdepth 1 -name '*.desktop' -type f -printf '%f\n' 2>/dev/null | head -1)
     fi
 
-    DEB_FILE="${OUTPUT_DIR}/${PKG_NAME}_${DEBIAN_VER}_amd64.deb"
-    cp "$deb_file" "$DEB_FILE"
-    rm -rf "$tmp"
+    echo "--- 上传 deb 到 R2（灾备） ---"
+    r2_url=""
+    if [[ -n "${R2_ACCESS_KEY_ID:-}" && -n "${R2_ENDPOINT:-}" && -n "${R2_BUCKET:-}" ]]; then
+        R2_KEY="${PKG_NAME}/pool/${DEBIAN_VER}/${PKG_NAME}_${DEBIAN_VER}_amd64.deb"
+        if command -v aws > /dev/null 2>&1; then
+            set +e
+            r2_output=$(AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
+                AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+                AWS_DEFAULT_REGION=auto \
+                aws s3 cp "$deb_file" "s3://${R2_BUCKET}/${R2_KEY}" \
+                --endpoint-url "${R2_ENDPOINT}" 2>&1)
+            R2_RC=$?
+            set -e
+            if [[ $R2_RC -eq 0 ]]; then
+                R2_PUBLIC_URL="${R2_PUBLIC_URL:-https://r2.cccczl.top}"
+                r2_url="${R2_PUBLIC_URL}/${R2_KEY}"
+                echo "    R2 上传成功: ${r2_url}"
+            else
+                echo "    WARNING: R2 上传失败 (exit code: ${R2_RC})，r2_url 留空"
+            fi
+        else
+            echo "    WARNING: aws CLI 不可用，跳过 R2 上传"
+        fi
+    else
+        echo "    SKIP: R2 环境变量未设置"
+    fi
+
+    echo "--- 生成 metadata.json ---"
+    BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    COMMIT_SHA=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    METADATA_FILE="${OUTPUT_DIR}/metadata.json"
+    cat > "$METADATA_FILE" << METAEOF
+{
+  "schema_version": 1,
+  "package_type": "external",
+  "package": "${PKG_NAME}",
+  "version": "${DEBIAN_VER}",
+  "architecture": "${orig_arch}",
+  "maintainer": "${orig_maintainer}",
+  "description": "${orig_desc%%$'\n'*}",
+  "long_description": "${LONG_DESC}",
+  "depends": "${orig_depends}",
+  "homepage": "${HOMEPAGE}",
+  "section": "${orig_section}",
+  "priority": "${orig_priority}",
+  "installed_size": "${orig_installed_size}",
+  "size": "${deb_size}",
+  "sha256": "${deb_sha256}",
+  "md5": "${deb_md5}",
+  "download": {
+    "upstream_url": "${DOWNLOAD_URL}",
+    "r2_url": "${r2_url}"
+  },
+  "zh_name": "${ZH_NAME}",
+  "zh_summary": "${ZH_SUMMARY}",
+  "zh_desc": "${ZH_DESC}",
+  "developer_name": "${DEVELOPER_NAME}",
+  "project_license": "${PROJECT_LICENSE}",
+  "icon_url": "${ICON_URL}",
+  "screenshot_url": "${SCREENSHOT_URL}",
+  "desktop_id": "${upstream_desktop}",
+  "commit_sha": "${COMMIT_SHA}",
+  "build_date": "${BUILD_DATE}"
+}
+METAEOF
+    echo "    输出: ${METADATA_FILE}"
 
     echo "--- 生成 DEP-11 元数据 ---"
     "${TEMPLATES_DIR}/gen-dep11.sh" \
@@ -222,9 +319,12 @@ if [[ "$FETCH_TYPE" == "deb-url" ]]; then
         ${upstream_desktop:+--desktop-id "$upstream_desktop"} \
         --output-dir "$PKG_DIR"
 
+    rm -rf "$tmp"
+
     echo ""
     echo "=== 构建完成 ==="
-    echo "  deb: ${DEB_FILE}"
+    echo "  metadata: ${METADATA_FILE}"
+    echo "  类型: external（第三方 deb，仅元数据）"
     exit 0
 fi
 

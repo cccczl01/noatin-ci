@@ -7,17 +7,14 @@ REPO_DIR="$(mktemp -d /tmp/noatin-repo-XXXXXX)"
 PACKAGES_DIR="${PROJECT_ROOT}/debian/packages"
 SCRIPTS_DIR="${PROJECT_ROOT}/debian/scripts"
 
-if [[ -z "${GITEE_TOKEN:-}" ]]; then
-    echo "错误: GITEE_TOKEN 未设置，无法 clone noatin-repo" >&2
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    echo "错误: GITHUB_TOKEN 未设置，无法 clone noatin-repo" >&2
     exit 1
 fi
-git clone "https://oauth2:${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
+git clone "https://oauth2:${GITHUB_TOKEN}@github.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
 git -C "$REPO_DIR" config user.name "CI Builder"
 git -C "$REPO_DIR" config user.email "ci@noatin.dev"
-git -C "$REPO_DIR" remote rename origin gitee
-git -C "$REPO_DIR" remote add github "https://github.com/cccczl01/noatin-repo.git"
-git -C "$REPO_DIR" remote add gitcode "https://gitcode.com/cccczl001/noatin-repo.git"
-echo "REPO_DIR: ${REPO_DIR} (cloned from Gitee)"
+echo "REPO_DIR: ${REPO_DIR} (cloned from GitHub)"
 
 DRY_RUN="false"
 PKG_FILTER=""
@@ -26,8 +23,8 @@ usage() {
     cat <<'EOF'
 用法: ci-build.sh [OPTIONS]
 
-CI 编排脚本：检测 debian/packages/ 下的包变更，调用 build-package.sh 构建 deb，
-GPG 签名后上传到 R2 + 推送到三平台仓库，并触发 VPS 索引更新。
+CI 编排脚本：检测 debian/packages/ 下的包变更，调用 build-package.sh 构建，
+GPG 签名后上传到 R2 + 推送到 GitHub 仓库，并触发 VPS 索引更新。
 
 Options:
   --dry-run       只输出将要构建的包和推送目标，不执行实际构建
@@ -36,9 +33,7 @@ Options:
 
 Environment Variables (CI secrets):
   GPG_PRIVATE_KEY       GPG 私钥（ASCII-armored），用于 deb 包签名
-  GITEE_TOKEN           Gitee Personal Access Token
   GITHUB_TOKEN          GitHub Personal Access Token
-  GITCODE_TOKEN         GitCode Personal Access Token
   VPS_API_KEY           VPS API 密钥（用于 DEP-11 上传和索引更新回调）
   R2_ACCESS_KEY_ID      Cloudflare R2 Access Key ID（上传 deb 到 R2）
   R2_SECRET_ACCESS_KEY  Cloudflare R2 Secret Access Key
@@ -164,6 +159,7 @@ for pkg_name in "${PACKAGES[@]}"; do
     DEBIAN_REVISION="${CONF[debian_revision]}"
     DEBIAN_VER="${UPSTREAM_VERSION}-${DEBIAN_REVISION}"
     PKG="${NAME}"
+    FETCH_TYPE="${CONF[fetch_type]:-local}"
 
     PKG_REPO_DIR="${REPO_DIR}/${PKG}/pool/${DEBIAN_VER}"
     REPO_DEP11_DIR="${REPO_DIR}/dep11"
@@ -171,10 +167,15 @@ for pkg_name in "${PACKAGES[@]}"; do
 
     if [[ "${DRY_RUN}" = "true" ]]; then
         echo "  [DRY-RUN] 构建: build-package.sh --pkg-dir ${PKG_DIR}"
-        echo "  [DRY-RUN] 输出: ${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb"
+        if [[ "$FETCH_TYPE" == "deb-url" ]]; then
+            echo "  [DRY-RUN] 类型: external（元数据模式）"
+            echo "  [DRY-RUN] 输出: ${PKG_REPO_DIR}/metadata.json"
+        else
+            echo "  [DRY-RUN] 类型: self-build（deb 打包模式）"
+            echo "  [DRY-RUN] 输出: ${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb"
+        fi
         echo "  [DRY-RUN] DEP-11: ${SRC_DEP11_YML} → ${REPO_DEP11_DIR}/"
-        echo "  [DRY-RUN] R2: ${PKG}/pool/${DEBIAN_VER}/$(basename "${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb")"
-        echo "  [DRY-RUN] 推送: Gitee → GitHub (sync-mirrors.sh) → GitCode"
+        echo "  [DRY-RUN] 推送: GitHub"
         echo "  [DRY-RUN] VPS: DEP-11 上传 + 索引更新回调"
         echo "  SUCCESS: ${pkg_name} (干跑)"
         BUILD_RESULTS["${pkg_name}"]="SUCCESS"
@@ -200,96 +201,53 @@ for pkg_name in "${PACKAGES[@]}"; do
         continue
     fi
 
-    DEB_FILE=$(find "$BUILD_OUTPUT_DIR" -name "${PKG}_*_amd64.deb" | head -1)
-    if [[ -z "$DEB_FILE" || ! -f "$DEB_FILE" ]]; then
-        echo "  FAILED: 未找到生成的 deb 文件"
-        BUILD_RESULTS["${pkg_name}"]="FAILED"
-        FAILED_PKGS="${FAILED_PKGS} ${pkg_name}"
-        echo ""
-        continue
-    fi
-
-    echo "  deb: ${DEB_FILE}"
-
-    mkdir -p "$PKG_REPO_DIR"
-    cp "$DEB_FILE" "$PKG_REPO_DIR/"
-    echo "  COPY: ${DEB_FILE} → ${PKG_REPO_DIR}/"
-
-    if [[ -f "$SRC_DEP11_YML" ]]; then
-        mkdir -p "$REPO_DEP11_DIR"
-        cp "$SRC_DEP11_YML" "$REPO_DEP11_DIR/"
-        echo "  COPY-DEP11: ${SRC_DEP11_YML} → ${REPO_DEP11_DIR}/"
-    else
-        echo "  WARN: DEP-11 YAML 不存在: ${SRC_DEP11_YML}"
-    fi
-
-    if [[ -n "${R2_ACCESS_KEY_ID:-}" && -n "${R2_ENDPOINT:-}" && -n "${R2_BUCKET:-}" ]]; then
-        R2_KEY="${PKG}/pool/${DEBIAN_VER}/$(basename "$DEB_FILE")"
-        echo "  R2: 上传 ${R2_KEY}..."
-        set +e
-        r2_output=$(AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
-            AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
-            AWS_DEFAULT_REGION=auto \
-            aws s3 cp "$DEB_FILE" "s3://${R2_BUCKET}/${R2_KEY}" \
-            --endpoint-url "${R2_ENDPOINT}" 2>&1)
-        R2_RC=$?
-        set -e
-        if [[ $R2_RC -eq 0 ]]; then
-            echo "  R2: 上传成功"
-        else
-            echo "  WARN: R2 上传失败 (exit code: ${R2_RC})"
-            echo "  R2-DEBUG: ${r2_output}" | head -3
+    if [[ "$FETCH_TYPE" == "deb-url" ]]; then
+        # --- 场景一：external 包，仅 metadata.json ---
+        METADATA_FILE="${BUILD_OUTPUT_DIR}/metadata.json"
+        if [[ ! -f "$METADATA_FILE" ]]; then
+            echo "  FAILED: 未找到 metadata.json"
+            BUILD_RESULTS["${pkg_name}"]="FAILED"
+            FAILED_PKGS="${FAILED_PKGS} ${pkg_name}"
+            echo ""
+            continue
         fi
-    else
-        echo "  R2: 跳过（R2 环境变量未设置）"
-    fi
+        echo "  metadata: ${METADATA_FILE}"
 
-    if [[ -n "${GPG_PRIVATE_KEY:-}" ]]; then
-        echo "  GPG: 导入私钥..."
-        KEY_ID=""
-        if gpg --batch --import <<< "${GPG_PRIVATE_KEY}" 2>/dev/null; then
-            KEY_ID=$(gpg --list-secret-keys --with-colons 2>/dev/null | grep '^sec:' | head -1 | cut -d: -f5)
-            if [[ -n "$KEY_ID" ]]; then
-                REPO_DEB="${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb"
-                if command -v dpkg-sig > /dev/null 2>&1; then
-                    dpkg-sig --sign builder "$REPO_DEB" 2>/dev/null && echo "  GPG: dpkg-sig 签名成功" || echo "  WARN: dpkg-sig 签名失败"
-                else
-                    gpg --batch --yes --detach-sign --local-user "$KEY_ID" "$REPO_DEB" 2>/dev/null && echo "  GPG: detach-sign 签名成功" || echo "  WARN: GPG 签名失败"
-                fi
-            else
-                echo "  WARN: 无法解析 GPG key ID"
-            fi
-            gpg --batch --yes --delete-secret-and-public-key "$KEY_ID" 2>/dev/null || true
-            echo "  GPG: 密钥已清理"
+        mkdir -p "$PKG_REPO_DIR"
+        cp "$METADATA_FILE" "$PKG_REPO_DIR/"
+        echo "  COPY: metadata.json → ${PKG_REPO_DIR}/"
+
+        if [[ -f "$SRC_DEP11_YML" ]]; then
+            mkdir -p "$REPO_DEP11_DIR"
+            cp "$SRC_DEP11_YML" "$REPO_DEP11_DIR/"
+            echo "  COPY-DEP11: ${SRC_DEP11_YML} → ${REPO_DEP11_DIR}/"
         else
-            echo "  WARN: GPG 私钥导入失败，跳过签名"
+            echo "  WARN: DEP-11 YAML 不存在: ${SRC_DEP11_YML}"
         fi
-    else
-        echo "  GPG: GPG_PRIVATE_KEY 未设置，跳过签名（仅本地/干跑模式正常）"
-    fi
 
-    echo "  GIT: 添加构建产物..."
-    REPO_CHANGELOG_DIR="${REPO_DIR}/_changelog"
-    mkdir -p "${REPO_CHANGELOG_DIR}"
+        echo "  R2: 已在 build-package.sh 中上传"
+        echo "  GPG: 跳过（external 包不签名）"
 
-    CHANGELOG_DATE=$(date '+%Y-%m-%d')
-    ORIG_COMMIT_MSG=$(git -C "$PROJECT_ROOT" log -1 --format=%s "$ORIG_HEAD" 2>/dev/null || echo "CI: build ${PKG} ${DEBIAN_VER}")
-    CHANGELOG_SUMMARY=""
-    if echo "${ORIG_COMMIT_MSG}" | grep -q '^feat:'; then
-        CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | sed 's/^feat:[[:space:]]*//')
-    elif echo "${ORIG_COMMIT_MSG}" | grep -q '^fix:'; then
-        CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | sed 's/^fix:[[:space:]]*//')
-    elif echo "${ORIG_COMMIT_MSG}" | grep -qP '\[changelog:\s*([^\]]+)\]'; then
-        CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | grep -oP '\[changelog:\s*\K[^\]]+')
-    elif echo "${ORIG_COMMIT_MSG}" | grep -q '^chore:'; then
-        CHANGELOG_SUMMARY="更新 ${PKG} 至 ${DEBIAN_VER}"
-    elif echo "${ORIG_COMMIT_MSG}" | grep -qP '\[changelog:\s*([^\]]+)\]'; then
-        CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | grep -oP '\[changelog:\s*\K[^\]]+')
-    else
-        CHANGELOG_SUMMARY="${PKG} ${DEBIAN_VER}"
-    fi
-    CHANGELOG_JSON_FILE="${REPO_CHANGELOG_DIR}/${CHANGELOG_DATE}-${PKG}-${DEBIAN_VER}.json"
-    cat > "${CHANGELOG_JSON_FILE}" << CHANGELOGEOF
+        echo "  GIT: 添加构建产物..."
+        REPO_CHANGELOG_DIR="${REPO_DIR}/_changelog"
+        mkdir -p "${REPO_CHANGELOG_DIR}"
+
+        CHANGELOG_DATE=$(date '+%Y-%m-%d')
+        ORIG_COMMIT_MSG=$(git -C "$PROJECT_ROOT" log -1 --format=%s "$ORIG_HEAD" 2>/dev/null || echo "CI: build ${PKG} ${DEBIAN_VER}")
+        CHANGELOG_SUMMARY=""
+        if echo "${ORIG_COMMIT_MSG}" | grep -q '^feat:'; then
+            CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | sed 's/^feat:[[:space:]]*//')
+        elif echo "${ORIG_COMMIT_MSG}" | grep -q '^fix:'; then
+            CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | sed 's/^fix:[[:space:]]*//')
+        elif echo "${ORIG_COMMIT_MSG}" | grep -qP '\[changelog:\s*([^\]]+)\]'; then
+            CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | grep -oP '\[changelog:\s*\K[^\]]+')
+        elif echo "${ORIG_COMMIT_MSG}" | grep -q '^chore:'; then
+            CHANGELOG_SUMMARY="更新 ${PKG} 至 ${DEBIAN_VER}"
+        else
+            CHANGELOG_SUMMARY="${PKG} ${DEBIAN_VER}"
+        fi
+        CHANGELOG_JSON_FILE="${REPO_CHANGELOG_DIR}/${CHANGELOG_DATE}-${PKG}-${DEBIAN_VER}.json"
+        cat > "${CHANGELOG_JSON_FILE}" << CHANGELOGEOF
 {
     "package": "${PKG}",
     "version": "${DEBIAN_VER}",
@@ -297,84 +255,180 @@ for pkg_name in "${PACKAGES[@]}"; do
     "summary": "${CHANGELOG_SUMMARY}"
 }
 CHANGELOGEOF
-    echo "  CHANGELOG: ${CHANGELOG_JSON_FILE}"
-    git -C "$REPO_DIR" add "${CHANGELOG_JSON_FILE#${REPO_DIR}/}/" 2>/dev/null || true
+        echo "  CHANGELOG: ${CHANGELOG_JSON_FILE}"
+        git -C "$REPO_DIR" add "${CHANGELOG_JSON_FILE#${REPO_DIR}/}/" 2>/dev/null || true
 
-    git -C "$REPO_DIR" add "${PKG_REPO_DIR#${REPO_DIR}/}/" 2>/dev/null || true
-    if [[ -f "$SRC_DEP11_YML" ]]; then
-        REPO_DEP11_DEST="${REPO_DEP11_DIR}/$(basename "$SRC_DEP11_YML")"
-        git -C "$REPO_DIR" add "${REPO_DEP11_DEST#${REPO_DIR}/}/" 2>/dev/null || true
-    fi
-
-    COMMIT_MSG="CI: build ${PKG} ${DEBIAN_VER} [${ORIG_HEAD:0:7}]"
-    if git -C "$REPO_DIR" diff --cached --quiet; then
-        echo "  GIT: 无变更需要提交"
-    else
-        git -C "$REPO_DIR" commit -m "$COMMIT_MSG"
-        echo "  GIT: 已提交 — ${COMMIT_MSG}"
-    fi
-
-    GITEE_REMOTE="gitee"
-    if git -C "$REPO_DIR" remote get-url "$GITEE_REMOTE" > /dev/null 2>&1; then
-        if [[ -n "${GITEE_TOKEN:-}" ]]; then
-            GITEE_URL="https://oauth2:${GITEE_TOKEN}@gitee.com/cccczl01/noatin-repo.git"
-        else
-            GITEE_URL="$(git -C "$REPO_DIR" remote get-url "$GITEE_REMOTE")"
+        git -C "$REPO_DIR" add "${PKG_REPO_DIR#${REPO_DIR}/}/" 2>/dev/null || true
+        if [[ -f "$SRC_DEP11_YML" ]]; then
+            REPO_DEP11_DEST="${REPO_DEP11_DIR}/$(basename "$SRC_DEP11_YML")"
+            git -C "$REPO_DIR" add "${REPO_DEP11_DEST#${REPO_DIR}/}/" 2>/dev/null || true
         fi
-        echo "  PUSH: Gitee..."
+
+        COMMIT_MSG="CI: metadata ${PKG} ${DEBIAN_VER} [${ORIG_HEAD:0:7}]"
+        if git -C "$REPO_DIR" diff --cached --quiet; then
+            echo "  GIT: 无变更需要提交"
+        else
+            git -C "$REPO_DIR" commit -m "$COMMIT_MSG"
+            echo "  GIT: 已提交 — ${COMMIT_MSG}"
+        fi
+    else
+        # --- 场景二：self-build 包，deb 文件 ---
+        DEB_FILE=$(find "$BUILD_OUTPUT_DIR" -name "${PKG}_*_amd64.deb" | head -1)
+        if [[ -z "$DEB_FILE" || ! -f "$DEB_FILE" ]]; then
+            echo "  FAILED: 未找到生成的 deb 文件"
+            BUILD_RESULTS["${pkg_name}"]="FAILED"
+            FAILED_PKGS="${FAILED_PKGS} ${pkg_name}"
+            echo ""
+            continue
+        fi
+
+        echo "  deb: ${DEB_FILE}"
+
+        mkdir -p "$PKG_REPO_DIR"
+        cp "$DEB_FILE" "$PKG_REPO_DIR/"
+        echo "  COPY: ${DEB_FILE} → ${PKG_REPO_DIR}/"
+
+        if [[ -f "$SRC_DEP11_YML" ]]; then
+            mkdir -p "$REPO_DEP11_DIR"
+            cp "$SRC_DEP11_YML" "$REPO_DEP11_DIR/"
+            echo "  COPY-DEP11: ${SRC_DEP11_YML} → ${REPO_DEP11_DIR}/"
+        else
+            echo "  WARN: DEP-11 YAML 不存在: ${SRC_DEP11_YML}"
+        fi
+
+        if [[ -n "${R2_ACCESS_KEY_ID:-}" && -n "${R2_ENDPOINT:-}" && -n "${R2_BUCKET:-}" ]]; then
+            R2_KEY="${PKG}/pool/${DEBIAN_VER}/$(basename "$DEB_FILE")"
+            echo "  R2: 上传 ${R2_KEY}..."
+            set +e
+            r2_output=$(AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
+                AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+                AWS_DEFAULT_REGION=auto \
+                aws s3 cp "$DEB_FILE" "s3://${R2_BUCKET}/${R2_KEY}" \
+                --endpoint-url "${R2_ENDPOINT}" 2>&1)
+            R2_RC=$?
+            set -e
+            if [[ $R2_RC -eq 0 ]]; then
+                echo "  R2: 上传成功"
+            else
+                echo "  WARN: R2 上传失败 (exit code: ${R2_RC})"
+                echo "  R2-DEBUG: ${r2_output}" | head -3
+            fi
+        else
+            echo "  R2: 跳过（R2 环境变量未设置）"
+        fi
+
+        if [[ -n "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "  GPG: 导入私钥..."
+            KEY_ID=""
+            if gpg --batch --import <<< "${GPG_PRIVATE_KEY}" 2>/dev/null; then
+                KEY_ID=$(gpg --list-secret-keys --with-colons 2>/dev/null | grep '^sec:' | head -1 | cut -d: -f5)
+                if [[ -n "$KEY_ID" ]]; then
+                    REPO_DEB="${PKG_REPO_DIR}/${PKG}_${DEBIAN_VER}_amd64.deb"
+                    if command -v dpkg-sig > /dev/null 2>&1; then
+                        dpkg-sig --sign builder "$REPO_DEB" 2>/dev/null && echo "  GPG: dpkg-sig 签名成功" || echo "  WARN: dpkg-sig 签名失败"
+                    else
+                        gpg --batch --yes --detach-sign --local-user "$KEY_ID" "$REPO_DEB" 2>/dev/null && echo "  GPG: detach-sign 签名成功" || echo "  WARN: GPG 签名失败"
+                    fi
+                else
+                    echo "  WARN: 无法解析 GPG key ID"
+                fi
+                gpg --batch --yes --delete-secret-and-public-key "$KEY_ID" 2>/dev/null || true
+                echo "  GPG: 密钥已清理"
+            else
+                echo "  WARN: GPG 私钥导入失败，跳过签名"
+            fi
+        else
+            echo "  GPG: GPG_PRIVATE_KEY 未设置，跳过签名（仅本地/干跑模式正常）"
+        fi
+
+        echo "  GIT: 添加构建产物..."
+        REPO_CHANGELOG_DIR="${REPO_DIR}/_changelog"
+        mkdir -p "${REPO_CHANGELOG_DIR}"
+
+        CHANGELOG_DATE=$(date '+%Y-%m-%d')
+        ORIG_COMMIT_MSG=$(git -C "$PROJECT_ROOT" log -1 --format=%s "$ORIG_HEAD" 2>/dev/null || echo "CI: build ${PKG} ${DEBIAN_VER}")
+        CHANGELOG_SUMMARY=""
+        if echo "${ORIG_COMMIT_MSG}" | grep -q '^feat:'; then
+            CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | sed 's/^feat:[[:space:]]*//')
+        elif echo "${ORIG_COMMIT_MSG}" | grep -q '^fix:'; then
+            CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | sed 's/^fix:[[:space:]]*//')
+        elif echo "${ORIG_COMMIT_MSG}" | grep -qP '\[changelog:\s*([^\]]+)\]'; then
+            CHANGELOG_SUMMARY=$(echo "${ORIG_COMMIT_MSG}" | grep -oP '\[changelog:\s*\K[^\]]+')
+        elif echo "${ORIG_COMMIT_MSG}" | grep -q '^chore:'; then
+            CHANGELOG_SUMMARY="更新 ${PKG} 至 ${DEBIAN_VER}"
+        else
+            CHANGELOG_SUMMARY="${PKG} ${DEBIAN_VER}"
+        fi
+        CHANGELOG_JSON_FILE="${REPO_CHANGELOG_DIR}/${CHANGELOG_DATE}-${PKG}-${DEBIAN_VER}.json"
+        cat > "${CHANGELOG_JSON_FILE}" << CHANGELOGEOF
+{
+    "package": "${PKG}",
+    "version": "${DEBIAN_VER}",
+    "date": "${CHANGELOG_DATE}",
+    "summary": "${CHANGELOG_SUMMARY}"
+}
+CHANGELOGEOF
+        echo "  CHANGELOG: ${CHANGELOG_JSON_FILE}"
+        git -C "$REPO_DIR" add "${CHANGELOG_JSON_FILE#${REPO_DIR}/}/" 2>/dev/null || true
+
+        git -C "$REPO_DIR" add "${PKG_REPO_DIR#${REPO_DIR}/}/" 2>/dev/null || true
+        if [[ -f "$SRC_DEP11_YML" ]]; then
+            REPO_DEP11_DEST="${REPO_DEP11_DIR}/$(basename "$SRC_DEP11_YML")"
+            git -C "$REPO_DIR" add "${REPO_DEP11_DEST#${REPO_DIR}/}/" 2>/dev/null || true
+        fi
+
+        COMMIT_MSG="CI: build ${PKG} ${DEBIAN_VER} [${ORIG_HEAD:0:7}]"
+        if git -C "$REPO_DIR" diff --cached --quiet; then
+            echo "  GIT: 无变更需要提交"
+        else
+            git -C "$REPO_DIR" commit -m "$COMMIT_MSG"
+            echo "  GIT: 已提交 — ${COMMIT_MSG}"
+        fi
+    fi
+
+    # --- 推送到 GitHub ---
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        GITHUB_URL="https://oauth2:${GITHUB_TOKEN}@github.com/cccczl01/noatin-repo.git"
+    else
+        GITHUB_URL="$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || echo "")"
+    fi
+    if [[ -n "$GITHUB_URL" ]]; then
+        echo "  PUSH: GitHub..."
         set +e
-        # fetch + rebase before push to handle concurrent remote changes
         LOCAL_SHA=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null)
-        push_output=$(git -C "$REPO_DIR" push "$GITEE_URL" main 2>&1)
-        GITEE_RC=$?
+        push_output=$(git -C "$REPO_DIR" push "$GITHUB_URL" main 2>&1)
+        GITHUB_RC=$?
         set -e
         echo "${push_output}" | sed 's|https://[^@]*@|https://***@|g'
 
-        # If "Everything up-to-date" but local has new commits, try fetch+rebase+push
-        if [[ $GITEE_RC -eq 0 ]] && echo "${push_output}" | grep -q "Everything up-to-date"; then
+        if [[ $GITHUB_RC -eq 0 ]] && echo "${push_output}" | grep -q "Everything up-to-date"; then
             if [[ -n "$LOCAL_SHA" ]]; then
-                REMOTE_SHA=$(git -C "$REPO_DIR" ls-remote "$GITEE_URL" refs/heads/main 2>/dev/null | awk '{print $1}')
+                REMOTE_SHA=$(git -C "$REPO_DIR" ls-remote "$GITHUB_URL" refs/heads/main 2>/dev/null | awk '{print $1}')
                 if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
                     echo "  PUSH: 检测到远程有新提交，尝试 fetch + rebase..."
                     set +e
-                    git -C "$REPO_DIR" fetch "$GITEE_URL" main 2>&1 | sed 's|https://[^@]*@|https://***@|g'
+                    git -C "$REPO_DIR" fetch "$GITHUB_URL" main 2>&1 | sed 's|https://[^@]*@|https://***@|g'
                     git -C "$REPO_DIR" rebase FETCH_HEAD 2>&1
-                    rebase_push_output=$(git -C "$REPO_DIR" push "$GITEE_URL" main 2>&1)
-                    GITEE_RC=$?
+                    rebase_push_output=$(git -C "$REPO_DIR" push "$GITHUB_URL" main 2>&1)
+                    GITHUB_RC=$?
                     set -e
                     echo "${rebase_push_output}" | sed 's|https://[^@]*@|https://***@|g'
                 fi
             fi
         fi
 
-        if [[ $GITEE_RC -eq 0 ]]; then
-            REMOTE_SHA=$(git -C "$REPO_DIR" ls-remote "$GITEE_URL" refs/heads/main 2>/dev/null | awk '{print $1}')
+        if [[ $GITHUB_RC -eq 0 ]]; then
+            REMOTE_SHA=$(git -C "$REPO_DIR" ls-remote "$GITHUB_URL" refs/heads/main 2>/dev/null | awk '{print $1}')
             if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
-                echo "  PUSH: Gitee 推送成功"
+                echo "  PUSH: GitHub 推送成功"
             else
-                echo "  WARN: Gitee push 返回成功但 local=$LOCAL_SHA remote=$REMOTE_SHA 不一致"
+                echo "  WARN: GitHub push 返回成功但 local=$LOCAL_SHA remote=$REMOTE_SHA 不一致"
             fi
         else
-            echo "  WARN: Gitee 推送失败 (exit code: ${GITEE_RC})"
+            echo "  WARN: GitHub 推送失败 (exit code: ${GITHUB_RC})"
         fi
     else
-        echo "  WARN: Gitee remote 未配置，跳过推送"
-    fi
-
-    SYNC_SCRIPT="${REPO_DIR}/scripts/sync-mirrors.sh"
-    if [[ -f "$SYNC_SCRIPT" ]]; then
-        echo "  SYNC: 调用 sync-mirrors.sh..."
-        set +e
-        bash "$SYNC_SCRIPT"
-        SYNC_RC=$?
-        set -e
-        if [[ $SYNC_RC -eq 0 ]]; then
-            echo "  SYNC: 三平台镜像同步完成"
-        else
-            echo "  WARN: sync-mirrors.sh 退出码 ${SYNC_RC}"
-        fi
-    else
-        echo "  WARN: sync-mirrors.sh 不存在，跳过镜像同步"
+        echo "  WARN: GitHub remote 未配置，跳过推送"
     fi
 
     if [[ -f "$SRC_DEP11_YML" && -n "${VPS_API_KEY:-}" ]]; then

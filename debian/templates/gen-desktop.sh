@@ -44,7 +44,7 @@ cat <<'EOF'
 --mime-types <MIME>     MIME 类型 (分号分隔，如 text/xml;application/json;)
 --wm-class <窗口类名>   窗口管理器类名 (默认与 AppStream ID 一致)
 --terminal <true|false> 是否在终端运行 (默认 false)
---output-dir <目录>     输出目录 (写入 DIR/desktop/，默认 stdout)
+--output-dir <目录>     输出目录 (写入 DIR/usr/share/applications/，默认 stdout)
 
 示例:
 gen-desktop.sh --pkg-name chatgpt-client \
@@ -184,11 +184,11 @@ fi
 
 OUTPUT_FILE=""
 if [[ -n "$OUTPUT_DIR" ]]; then
-    if ! mkdir -p "$OUTPUT_DIR/desktop"; then
-        echo "错误: 无法创建输出目录: $OUTPUT_DIR/desktop" >&2
+    if ! mkdir -p "$OUTPUT_DIR/usr/share/applications"; then
+        echo "错误: 无法创建输出目录: $OUTPUT_DIR/usr/share/applications" >&2
         exit 1
     fi
-    OUTPUT_FILE="$OUTPUT_DIR/desktop/${APPSTREAM_ID}.desktop"
+    OUTPUT_FILE="$OUTPUT_DIR/usr/share/applications/${APPSTREAM_ID}.desktop"
 fi
 
 is_conditional_block() {

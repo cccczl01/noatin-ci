@@ -368,6 +368,11 @@ mkdir -p "${STAGING_DIR}/usr/share/doc/${PKG_NAME}"
 echo "--- 获取源码 (fetch_type=${FETCH_TYPE}) ---"
 fetch_source "$FETCH_TYPE" "$FETCH_SOURCE" "$STAGING_DIR" "$UPSTREAM_VERSION"
 
+# 移除上游旧的 desktop 文件，避免与新生成的冲突
+if [[ "$HAS_DESKTOP" = "yes" ]]; then
+    find "${STAGING_DIR}/usr/share/applications" -maxdepth 1 -name '*.desktop' -type f -delete 2>/dev/null || true
+fi
+
 echo "--- 生成 control ---"
 "${TEMPLATES_DIR}/gen-control.sh" \
     --pkg-name "$NAME" \

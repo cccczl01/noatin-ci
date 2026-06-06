@@ -1,19 +1,68 @@
-name: External URL Health Check
+name: Check External URLs
 
 on:
   schedule:
-    - cron: '0 8 * * 1'  # 每周一 UTC 08:00
-  workflow_dispatch:      # 手动触发
+    - cron: '0 0 * * 0'  # 每周日 00:00 UTC
+  workflow_dispatch:
 
 jobs:
-  health-check:
+  check:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run health check
+      - name: Run external URL health check
+        id: health_check
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          bash ci/debian/scripts/check-external-urls.sh
+          bash ci/debian/scripts/check-external-urls.sh > /tmp/check-result.txt 2>&1
+          echo "RC=$?" >> $GITHUB_OUTPUT
+
+      - name: Show check result
+        if: always()
+        run: cat /tmp/check-result.txt
+
+      - name: Create Issue for failed URLs
+        if: steps.health_check.outputs.RC != '0'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PAT }}
+          script: |
+            const fs = require('fs');
+            const result = fs.readFileSync('/tmp/check-result.txt', 'utf8');
+
+            const title = `[健康检查] 外部 upstream_url 失效 - ${new Date().toISOString().slice(0, 10)}`;
+            const body = `## 外部链接健康检查失败\n\n以下 upstream_url 不可达：\n\n\`\`\`\n${result}\n\`\`\`\n\n请检查对应包的 metadata.json 中的 upstream_url 是否仍然有效。`;
+
+            // 查找已有的同名 open issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['health-check']
+            });
+
+            const existing = issues.find(i => i.title.startsWith('[健康检查] 外部 upstream_url 失效'));
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: body
+              });
+              console.log(`已更新已有 Issue #${existing.number}`);
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['health-check']
+              });
+              console.log('已创建新 Issue');
+            }

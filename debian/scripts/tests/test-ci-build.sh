@@ -219,9 +219,7 @@ if [ ! -e "${PKG_LINK}" ]; then
 fi
 
 unset GPG_PRIVATE_KEY
-unset GITEE_TOKEN
 unset GITHUB_TOKEN
-unset GITCODE_TOKEN
 unset VPS_API_KEY
 unset VPS_DEP11_URL
 unset VPS_CALLBACK_URL

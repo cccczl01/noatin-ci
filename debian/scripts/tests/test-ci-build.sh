@@ -60,7 +60,7 @@ else
     assert_fail "ci-build.sh --help exits non-zero" "non-zero" "${CI_HELP_RC}"
 fi
 
-if grep -q '用法\|Usage' "${TEMP_DIR}/ci_build_help.txt"; then
+if grep -qi "用法\|usage" "${TEMP_DIR}/ci_build_help.txt"; then
     assert_pass "--help outputs usage information"
 else
     assert_fail "--help outputs usage information" "usage" "not found"

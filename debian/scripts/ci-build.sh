@@ -7,15 +7,6 @@ REPO_DIR="$(mktemp -d /tmp/noatin-repo-XXXXXX)"
 PACKAGES_DIR="${PROJECT_ROOT}/debian/packages"
 SCRIPTS_DIR="${PROJECT_ROOT}/debian/scripts"
 
-if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-    echo "错误: GITHUB_TOKEN 未设置，无法 clone noatin-repo" >&2
-    exit 1
-fi
-git clone "https://oauth2:${GITHUB_TOKEN}@github.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
-git -C "$REPO_DIR" config user.name "CI Builder"
-git -C "$REPO_DIR" config user.email "ci@noatin.dev"
-echo "REPO_DIR: ${REPO_DIR} (cloned from GitHub)"
-
 DRY_RUN="false"
 PKG_FILTER=""
 
@@ -61,6 +52,17 @@ while [[ $# -gt 0 ]]; do
             echo "未知参数: $1" >&2; usage ;;
     esac
 done
+
+if [[ "${DRY_RUN}" != "true" ]]; then
+    if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+        echo "错误: GITHUB_TOKEN 未设置，无法 clone noatin-repo" >&2
+        exit 1
+    fi
+    git clone "https://oauth2:${GITHUB_TOKEN}@github.com/cccczl01/noatin-repo.git" "$REPO_DIR" > /dev/null 2>&1
+    git -C "$REPO_DIR" config user.name "CI Builder"
+    git -C "$REPO_DIR" config user.email "ci@noatin.dev"
+    echo "REPO_DIR: ${REPO_DIR} (cloned from GitHub)"
+fi
 
 ORIG_HEAD=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
 

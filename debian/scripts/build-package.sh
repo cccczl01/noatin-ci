@@ -291,43 +291,33 @@ if [[ "$FETCH_TYPE" == "deb-url" ]]; then
     fi
 
     echo "--- 生成 metadata.json ---"
-    BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    COMMIT_SHA=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
     METADATA_FILE="${OUTPUT_DIR}/metadata.json"
-    cat > "$METADATA_FILE" << METAEOF
-{
-  "schema_version": 1,
-  "package_type": "external",
-  "package": "${PKG_NAME}",
-  "version": "${DEBIAN_VER}",
-  "architecture": "${orig_arch}",
-  "maintainer": "${orig_maintainer}",
-  "description": "${orig_desc%%$'\n'*}",
-  "long_description": "${LONG_DESC}",
-  "depends": "${orig_depends}",
-  "homepage": "${HOMEPAGE}",
-  "section": "${orig_section}",
-  "priority": "${orig_priority}",
-  "installed_size": "${orig_installed_size}",
-  "size": "${deb_size}",
-  "sha256": "${deb_sha256}",
-  "md5": "${deb_md5}",
-  "download": {
-    "upstream_url": "${DOWNLOAD_URL}",
-    "r2_url": "${r2_url}"
-  },
-  "zh_name": "${ZH_NAME}",
-  "zh_summary": "${ZH_SUMMARY}",
-  "zh_desc": "${ZH_DESC}",
-  "developer_name": "${DEVELOPER_NAME}",
-  "project_license": "${PROJECT_LICENSE}",
-  "icon_url": "${ICON_URL}",
-  "screenshot_url": "${SCREENSHOT_URL}",
-  "desktop_id": "${upstream_desktop}",
-  "commit_sha": "${COMMIT_SHA}",
-  "build_date": "${BUILD_DATE}"
-}
-METAEOF
+    "${SCRIPT_DIR}/gen-metadata.sh" \
+        --pkg-name "$PKG_NAME" \
+        --version "$DEBIAN_VER" \
+        --upstream-url "$DOWNLOAD_URL" \
+        --sha256 "$deb_sha256" \
+        --size "$deb_size" \
+        --arch "$orig_arch" \
+        --maintainer "$orig_maintainer" \
+        --description "${orig_desc%%$'\n'*}" \
+        --depends "$orig_depends" \
+        --homepage "$HOMEPAGE" \
+        --section "$orig_section" \
+        --priority "$orig_priority" \
+        --installed-size "$orig_installed_size" \
+        --md5 "$deb_md5" \
+        ${r2_url:+--r2-url "$r2_url"} \
+        ${upstream_desktop:+--desktop-id "$upstream_desktop"} \
+        --long-desc "$LONG_DESC" \
+        --zh-name "$ZH_NAME" \
+        --zh-summary "$ZH_SUMMARY" \
+        --zh-desc "$ZH_DESC" \
+        --developer-name "$DEVELOPER_NAME" \
+        --project-license "$PROJECT_LICENSE" \
+        --icon-url "$ICON_URL" \
+        --screenshot-url "$SCREENSHOT_URL" \
+        --output-dir "$OUTPUT_DIR"
     echo "    输出: ${METADATA_FILE}"
 
     echo "--- 生成 DEP-11 元数据 ---"

@@ -20,7 +20,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          bash ci/debian/scripts/check-external-urls.sh > /tmp/check-result.txt 2>&1
+          bash debian/scripts/check-external-urls.sh > /tmp/check-result.txt 2>&1
           echo "RC=$?" >> $GITHUB_OUTPUT
 
       - name: Show check result
